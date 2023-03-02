@@ -147,7 +147,7 @@ type applicationConfig struct {
 func (a *application) run() error {
 	srv := http.Server{
 		Addr:         fmt.Sprintf(":%v", a.config.port),
-		Handler:      nil,
+		Handler:      a.router(),
 		ReadTimeout:  a.config.readTimeout,
 		WriteTimeout: a.config.writeTimeout,
 		IdleTimeout:  a.config.idleTimeout,

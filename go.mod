@@ -3,6 +3,8 @@ module github.com/jastenn/amponin
 go 1.20
 
 require (
+	github.com/go-chi/chi/v5 v5.0.8
+	github.com/julienschmidt/httprouter v1.3.0
 	github.com/urfave/cli/v2 v2.24.4
 	go.uber.org/automaxprocs v1.5.1
 	go.uber.org/zap v1.24.0
