@@ -96,8 +96,31 @@ func main() {
 			flags,
 			altsrc.NewYamlSourceFromFlagFunc("config-file"),
 		),
-		Flags:  flags,
-		Action: start,
+		Flags: flags,
+		Action: func(cCtx *cli.Context) error {
+			zapLogger, err := zap.NewProduction()
+			if err != nil {
+				return fmt.Errorf("unable to initialize logger: %w", err)
+			}
+
+			app := &application{
+				log: *zapLogger.Sugar(),
+				config: applicationConfig{
+					port:            cCtx.Int(portFlagKey),
+					environment:     cCtx.String(envFlagKey),
+					readTimeout:     cCtx.Duration(readTimeoutFlagKey),
+					writeTimeout:    cCtx.Duration(writeTimeoutFlagKey),
+					idleTimeout:     cCtx.Duration(idleTimeoutFlagKey),
+					shutdownTimeout: cCtx.Duration(shutdownTimeoutFlagKey),
+				},
+			}
+
+			if err := app.run(); err != nil {
+				return cli.Exit(err, 1)
+			}
+
+			return nil
+		},
 	}
 
 	err := app.Run(os.Args)
@@ -106,34 +129,43 @@ func main() {
 	}
 }
 
-func start(cCtx *cli.Context) error {
-	zapLogger, err := zap.NewProduction()
-	if err != nil {
-		return fmt.Errorf("unable to initialize logger: %w", err)
-	}
-	log := zapLogger.Sugar()
+type application struct {
+	log    zap.SugaredLogger
+	config applicationConfig
+}
 
+type applicationConfig struct {
+	port            int
+	environment     string
+	readTimeout     time.Duration
+	writeTimeout    time.Duration
+	idleTimeout     time.Duration
+	shutdownTimeout time.Duration
+}
+
+// run starts up the application.
+func (a *application) run() error {
 	srv := http.Server{
-		Addr:         fmt.Sprintf(":%v", cCtx.Int(portFlagKey)),
+		Addr:         fmt.Sprintf(":%v", a.config.port),
 		Handler:      nil,
-		ReadTimeout:  cCtx.Duration(readTimeoutFlagKey),
-		WriteTimeout: cCtx.Duration(writeTimeoutFlagKey),
-		IdleTimeout:  cCtx.Duration(idleTimeoutFlagKey),
+		ReadTimeout:  a.config.readTimeout,
+		WriteTimeout: a.config.writeTimeout,
+		IdleTimeout:  a.config.idleTimeout,
 	}
 
 	srvErrCh := make(chan error)
 	shutdownCh := make(chan os.Signal, 1)
 
 	go func() {
-		log.Infow(
+		a.log.Infow(
 			"server running",
 			"port", srv.Addr,
-			"environment", cCtx.String(envFlagKey),
+			"environment", a.config.environment,
 		)
 		srvErrCh <- srv.ListenAndServe()
 	}()
 
-	defer log.Infow(
+	defer a.log.Infow(
 		"server stopped",
 	)
 
@@ -144,18 +176,18 @@ func start(cCtx *cli.Context) error {
 		return err
 
 	case sig := <-shutdownCh:
-		log.Infow(
+		a.log.Infow(
 			"shutdown signal recieved",
 			"signal", sig,
 		)
-		log.Info("shutting down the server gracefully...")
+		a.log.Info("shutting down the server gracefully...")
 
-		ctx, cancel := context.WithTimeout(context.Background(), cCtx.Duration(shutdownTimeoutFlagKey))
+		ctx, cancel := context.WithTimeout(context.Background(), a.config.shutdownTimeout)
 		defer cancel()
 
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Errorf("unable to shutdown the server gracefully: %w", err)
-			log.Info("closing all active connection instead")
+			a.log.Errorf("unable to shutdown the server gracefully: %w", err)
+			a.log.Info("closing all active connection instead")
 			srv.Close()
 
 			return err
