@@ -11,6 +11,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
+	_ "go.uber.org/automaxprocs"
+	"go.uber.org/zap"
 )
 
 const (
@@ -105,6 +107,12 @@ func main() {
 }
 
 func start(cCtx *cli.Context) error {
+	zapLogger, err := zap.NewProduction()
+	if err != nil {
+		return fmt.Errorf("unable to initialize logger: %w", err)
+	}
+	log := zapLogger.Sugar()
+
 	srv := http.Server{
 		Addr:         fmt.Sprintf(":%v", cCtx.Int(portFlagKey)),
 		Handler:      nil,
@@ -117,8 +125,17 @@ func start(cCtx *cli.Context) error {
 	shutdownCh := make(chan os.Signal, 1)
 
 	go func() {
+		log.Infow(
+			"server running",
+			"port", srv.Addr,
+			"environment", cCtx.String(envFlagKey),
+		)
 		srvErrCh <- srv.ListenAndServe()
 	}()
+
+	defer log.Infow(
+		"server stopped",
+	)
 
 	signal.Notify(shutdownCh, syscall.SIGINT, syscall.SIGTERM)
 
@@ -126,15 +143,24 @@ func start(cCtx *cli.Context) error {
 	case err := <-srvErrCh:
 		return err
 
-	case <-shutdownCh:
+	case sig := <-shutdownCh:
+		log.Infow(
+			"shutdown signal recieved",
+			"signal", sig,
+		)
+		log.Info("shutting down the server gracefully...")
+
 		ctx, cancel := context.WithTimeout(context.Background(), cCtx.Duration(shutdownTimeoutFlagKey))
 		defer cancel()
 
 		if err := srv.Shutdown(ctx); err != nil {
+			log.Errorf("unable to shutdown the server gracefully: %w", err)
+			log.Info("closing all active connection instead")
 			srv.Close()
 
 			return err
 		}
+
 		return nil
 	}
 }
