@@ -12,7 +12,7 @@ var (
 	ErrAccountAlreadyUsed = errors.New("account is already in use")
 )
 
-type Picture struct {
+type Avatar struct {
 	Raw       string
 	Thumbnail *string
 }
@@ -21,7 +21,7 @@ type User struct {
 	Username  string
 	Email     string
 	Verified  bool
-	Picture   *Picture
+	Picture   *Avatar
 	Account   Account
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -67,7 +67,7 @@ func (u *UsersService) SignupWithGoogle(ctx context.Context, idToken string, use
 		},
 	}
 	if claims.Picture != nil {
-		user.Picture = &Picture{
+		user.Picture = &Avatar{
 			Raw: *claims.Picture,
 		}
 	}
