@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -15,7 +18,38 @@ func writeJSON(w http.ResponseWriter, code int, header http.Header, data interfa
 	for k, v := range header {
 		w.Header()[k] = v
 	}
+    w.WriteHeader(code)
 
-	w.WriteHeader(code)
-	return json.NewEncoder(w).Encode(data)
+    if err := json.NewEncoder(w).Encode(data); err != nil {
+        return err
+    }
+
+	return nil
+}
+
+// readJSON reads JSON data from the response body
+func readJSON(r *http.Request, data interface{}) error {
+	if err := json.NewDecoder(r.Body).Decode(data); err != nil {
+		var syntaxError *json.SyntaxError
+		var unmarshalTypeError *json.UnmarshalTypeError
+		var invalidUnmarshalError *json.InvalidUnmarshalError
+
+		switch {
+		case errors.As(err, &unmarshalTypeError):
+			if unmarshalTypeError.Field != "" {
+				return fmt.Errorf("json contains an incorrect JSON type for field %s", unmarshalTypeError.Field)
+			}
+			return fmt.Errorf("json contains an incorrect JSON type (at character %d)", unmarshalTypeError.Offset)
+		case errors.As(err, &syntaxError) || errors.Is(err, io.ErrUnexpectedEOF):
+			return fmt.Errorf("body contains badly formatted JSON (at character %v)", syntaxError.Offset)
+		case errors.Is(err, io.EOF):
+			return errors.New("body should not be empty")
+		case errors.As(err, &invalidUnmarshalError):
+			panic(err)
+		case err != nil:
+			return err
+		}
+	}
+
+	return nil
 }

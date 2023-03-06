@@ -3,17 +3,18 @@ package main
 import (
 	"net/http"
 
-	"github.com/julienschmidt/httprouter"
+    "github.com/go-chi/chi/v5"
 )
 
 func (a *application) router() http.Handler {
-	r := httprouter.New()
+	r := chi.NewMux()
 
-	r.Handler(
-		http.MethodGet,
+	r.Get(
 		"/healthcheck",
-		&HealthCheckHandler{environment: a.config.environment},
+		(&HealthCheckHandler{environment: a.config.environment}).ServeHTTP,
 	)
+
+	r.Mount("/users", NewUsersHandler(a.googleIDTokenVerifier))
 
 	return r
 }

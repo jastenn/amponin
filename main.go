@@ -2,13 +2,18 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/jastenn/amponin/internal/pkg/oidc/google"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	_ "go.uber.org/automaxprocs"
@@ -24,6 +29,7 @@ const (
 	configFileFlagKey      = "config-file"
 	portFlagKey            = "port"
 	envFlagKey             = "env"
+	databaseURLFlagKey     = "database_url"
 	readTimeoutFlagKey     = "read-timeout"
 	writeTimeoutFlagKey    = "write-timeout"
 	idleTimeoutFlagKey     = "idle-timeout"
@@ -85,6 +91,17 @@ var flags = []cli.Flag{
 		EnvVars: []string{"SHUTDOWN_TIMEOUT"},
 		Value:   time.Second * 15,
 	}),
+	altsrc.NewStringFlag(&cli.StringFlag{
+		Name:     databaseURLFlagKey,
+		Required: true,
+		Action: func(ctx *cli.Context, s string) error {
+			_, err := url.Parse(s)
+			if err != nil {
+				return errors.New("invalid database url")
+			}
+			return nil
+		},
+	}),
 }
 
 func main() {
@@ -99,12 +116,25 @@ func main() {
 		Flags: flags,
 		Action: func(cCtx *cli.Context) error {
 			zapLogger, err := zap.NewProduction()
+            log := zapLogger.Sugar() 
 			if err != nil {
-				return fmt.Errorf("unable to initialize logger: %w", err)
+                err = fmt.Errorf("unable to initialize logger: %w", err)
+                log.Error(err)
+				return cli.Exit(err, 1)
 			}
 
+            databaseURL := cCtx.String(databaseURLFlagKey)
+			db, err := sqlx.Connect("postgres", databaseURL)
+            if err != nil {
+                err = fmt.Errorf("unable to connect to %s: %w", databaseURL, err)
+                log.Error(err)
+                return cli.Exit(err, 1)
+            }
+
 			app := &application{
-				log: *zapLogger.Sugar(),
+				log:                   log,
+				db:                    db,
+				googleIDTokenVerifier: google.NewIDTokenVerifier(""),
 				config: applicationConfig{
 					port:            cCtx.Int(portFlagKey),
 					environment:     cCtx.String(envFlagKey),
@@ -130,8 +160,10 @@ func main() {
 }
 
 type application struct {
-	log    zap.SugaredLogger
-	config applicationConfig
+	log                   *zap.SugaredLogger
+	db                    *sqlx.DB
+	googleIDTokenVerifier *google.IDTokenVerifier
+	config                applicationConfig
 }
 
 type applicationConfig struct {
