@@ -1,23 +1,24 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"sync"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jastenn/amponin/internal/pkg/oidc/google"
+	"github.com/jastenn/amponin/internal/usecase"
 )
 
 // UsersHandler is a http handler for creating and managing users
 type UsersHandler struct {
 	sync.Once
-	r                     http.Handler
-	googleIDTokenVerifier *google.IDTokenVerifier
+	r            http.Handler
+	usersService *usecase.UsersService
 }
 
-func NewUsersHandler(googleIDTokenVerifier *google.IDTokenVerifier) *UsersHandler {
+func NewUsersHandler(usersService *usecase.UsersService) *UsersHandler {
 	return &UsersHandler{
-		googleIDTokenVerifier: googleIDTokenVerifier,
+		usersService: usersService,
 	}
 }
 
@@ -37,7 +38,8 @@ func (u *UsersHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // informations provided on request body.
 func (u *UsersHandler) SignupUserWithGoogle(w http.ResponseWriter, r *http.Request) {
 	var data struct {
-		IDToken string `json:"id_token"`
+		IDToken  string `json:"id_token"`
+		Username string `json:"username"`
 	}
 	err := readJSON(r, &data)
 	if err != nil {
@@ -50,23 +52,29 @@ func (u *UsersHandler) SignupUserWithGoogle(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	claims, err := u.googleIDTokenVerifier.VerifyAndParseClaims(r.Context(), data.IDToken)
+	user, err := u.usersService.SignupWithGoogle(r.Context(), data.IDToken, data.Username)
 	if err != nil {
-		writeJSON(
-			w, http.StatusBadRequest, nil,
-			H{
-				"error": err.Error(),
-			},
-		)
+		switch {
+		case errors.Is(err, usecase.ErrAccountAlreadyUsed) ||
+			errors.Is(err, usecase.ErrUsernamelreadyUsed) ||
+			errors.Is(err, usecase.ErrTokenIDExpired) ||
+			errors.Is(err, usecase.ErrTokenIDInvalid):
+			writeJSON(
+				w, http.StatusBadRequest, nil,
+				H{
+					"error": err.Error(),
+				},
+			)
+		default:
+			panic(err)
+		}
 		return
 	}
 
 	writeJSON(
 		w, http.StatusOK, nil,
 		H{
-			"claims": claims,
+			"user": user,
 		},
 	)
 }
-
-

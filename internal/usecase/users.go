@@ -5,11 +5,15 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jastenn/amponin/internal/pkg/oidc"
 	"github.com/jastenn/amponin/internal/pkg/oidc/google"
 )
 
 var (
 	ErrAccountAlreadyUsed = errors.New("account is already in use")
+	ErrUsernamelreadyUsed = errors.New("username is already in use")
+	ErrTokenIDExpired     = oidc.ErrIDTokenExpired
+	ErrTokenIDInvalid     = oidc.ErrIDTokenInvalid
 )
 
 type Avatar struct {
@@ -47,7 +51,17 @@ type UsersService struct {
 	googleIDTokenVerifier *google.IDTokenVerifier
 }
 
+func NewUsersService(usersStore UsersStore, googleIDTokenVerifier *google.IDTokenVerifier) *UsersService {
+	return &UsersService{
+		usersStore:            usersStore,
+		googleIDTokenVerifier: googleIDTokenVerifier,
+	}
+}
+
 func (u *UsersService) SignupWithGoogle(ctx context.Context, idToken string, username string) (User, error) {
+	if username == "" {
+		return User{}, errors.New("username is a required field")
+	}
 	claims, err := u.googleIDTokenVerifier.VerifyAndParseClaims(ctx, idToken)
 	if err != nil {
 		return User{}, err
@@ -77,5 +91,5 @@ func (u *UsersService) SignupWithGoogle(ctx context.Context, idToken string, use
 		return User{}, err
 	}
 
-    return user, nil
+	return user, nil
 }

@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"time"
 )
 
 // H is a shorthand for map[string]any
@@ -18,11 +22,11 @@ func writeJSON(w http.ResponseWriter, code int, header http.Header, data interfa
 	for k, v := range header {
 		w.Header()[k] = v
 	}
-    w.WriteHeader(code)
+	w.WriteHeader(code)
 
-    if err := json.NewEncoder(w).Encode(data); err != nil {
-        return err
-    }
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -52,4 +56,21 @@ func readJSON(r *http.Request, data interface{}) error {
 	}
 
 	return nil
+}
+
+// dbConnect creates creates a database pool and immmediately test the connection.
+func dbConnect(driverName string, dataSourceURL *url.URL) (*sql.DB, error) {
+	db, err := sql.Open("postgres", dataSourceURL.String())
+	if err != nil {
+		return nil, fmt.Errorf("unable to initialize database %s: %w", dataSourceURL.Redacted(), err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	err = db.PingContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("unable to connect to %s: %w", dataSourceURL.Redacted(), err)
+	}
+
+	return db, nil
 }

@@ -1,4 +1,8 @@
 MIGRATION_DIR=migrations  
+APP_CONFIG_FILE_NAME=amponin-server-config.yaml
+
+run:
+	go run ./ --config-file $(APP_CONFIG_FILE_NAME)
 
 migrate_create:
 	migrate create -ext sql -dir $(MIGRATION_DIR) -seq $(NAME)

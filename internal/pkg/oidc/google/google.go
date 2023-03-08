@@ -16,7 +16,7 @@ const (
 
 // GoogleClaims is the parsed payload of the ID token issued by Google
 type GoogleClaims struct {
-	ID       string  `json:"id"`
+	ID       string  `json:"sub"`
 	Email    string  `json:"email"`
 	Verified bool    `json:"email_verified"`
 	Picture  *string `json:"picture"`
@@ -39,7 +39,6 @@ func NewIDTokenVerifier(clientID string) *IDTokenVerifier {
 	return &IDTokenVerifier{
 		verifier: gooidc.NewVerifier(issuerURL, keySet, googleOIDCConfig),
 	}
-
 }
 
 // VerifyAndParseClaims verifies and parses the Google issued ID token and returns a GoogleClaims.

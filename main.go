@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,7 +13,8 @@ import (
 	"time"
 
 	"github.com/jastenn/amponin/internal/pkg/oidc/google"
-	"github.com/jmoiron/sqlx"
+	"github.com/jastenn/amponin/internal/store/pgstore"
+	"github.com/jastenn/amponin/internal/usecase"
 	_ "github.com/lib/pq"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
@@ -29,7 +31,7 @@ const (
 	configFileFlagKey      = "config-file"
 	portFlagKey            = "port"
 	envFlagKey             = "env"
-	databaseURLFlagKey     = "database_url"
+	databaseURLFlagKey     = "database-url"
 	readTimeoutFlagKey     = "read-timeout"
 	writeTimeoutFlagKey    = "write-timeout"
 	idleTimeoutFlagKey     = "idle-timeout"
@@ -46,8 +48,8 @@ var flags = []cli.Flag{
 		Name:    portFlagKey,
 		Aliases: []string{"p"},
 		Usage:   "port to use on running this application",
-		EnvVars: []string{"PORT"},
 		Value:   8080,
+		EnvVars: []string{"PORT"},
 		Action: func(ctx *cli.Context, v int) error {
 			if v >= 65536 || v <= 0 {
 				return fmt.Errorf("port value %v out of range[0-65535]", v)
@@ -92,12 +94,12 @@ var flags = []cli.Flag{
 		Value:   time.Second * 15,
 	}),
 	altsrc.NewStringFlag(&cli.StringFlag{
-		Name:     databaseURLFlagKey,
-		Required: true,
+		Name:  databaseURLFlagKey,
+		Usage: "database url to connect to",
 		Action: func(ctx *cli.Context, s string) error {
 			_, err := url.Parse(s)
-			if err != nil {
-				return errors.New("invalid database url")
+			if s == "" || err != nil {
+				return errors.New("invalid url")
 			}
 			return nil
 		},
@@ -116,25 +118,28 @@ func main() {
 		Flags: flags,
 		Action: func(cCtx *cli.Context) error {
 			zapLogger, err := zap.NewProduction()
-            log := zapLogger.Sugar() 
+			log := zapLogger.Sugar()
 			if err != nil {
-                err = fmt.Errorf("unable to initialize logger: %w", err)
-                log.Error(err)
+				err = fmt.Errorf("unable to initialize logger: %w", err)
+				log.Error(err)
 				return cli.Exit(err, 1)
 			}
 
-            databaseURL := cCtx.String(databaseURLFlagKey)
-			db, err := sqlx.Connect("postgres", databaseURL)
-            if err != nil {
-                err = fmt.Errorf("unable to connect to %s: %w", databaseURL, err)
-                log.Error(err)
-                return cli.Exit(err, 1)
-            }
+			databaseURL, _ := url.Parse(cCtx.String(databaseURLFlagKey))
+			db, err := dbConnect("postgres", databaseURL)
+			if err != nil {
+				log.Error(err)
+				return cli.Exit(err, 1)
+			}
+			log.Infof("database connection established on %s", databaseURL.Redacted())
 
 			app := &application{
-				log:                   log,
-				db:                    db,
-				googleIDTokenVerifier: google.NewIDTokenVerifier(""),
+				log: log,
+				db:  db,
+				usersService: usecase.NewUsersService(
+					pgstore.NewUserStore(db),
+					google.NewIDTokenVerifier(""),
+				),
 				config: applicationConfig{
 					port:            cCtx.Int(portFlagKey),
 					environment:     cCtx.String(envFlagKey),
@@ -160,10 +165,10 @@ func main() {
 }
 
 type application struct {
-	log                   *zap.SugaredLogger
-	db                    *sqlx.DB
-	googleIDTokenVerifier *google.IDTokenVerifier
-	config                applicationConfig
+	log          *zap.SugaredLogger
+	db           *sql.DB
+	usersService *usecase.UsersService
+	config       applicationConfig
 }
 
 type applicationConfig struct {
