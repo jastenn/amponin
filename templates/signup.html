@@ -1,0 +1,54 @@
+{{ define "head" }}
+	<title>Amponin - Signup</title>
+{{ end }}
+
+{{ define "content" }}
+<main class="container">
+	<div class="card max-w-sm mx-auto">
+		<h1 id="signup-heading" class="card__heading mx-auto">Signup</h1>
+		<form aria-labelledby="signup-heading" class="gap">
+			<div>
+				<label for="display-name" class="form-label">Display Name</label>	
+				<input id="display-name" type="text" name="display-name"
+					value="{{ .Values.DisplayName }}"
+					class="form-control"
+					aria-describedby="display-name-error">
+				{{ with .Errors.DisplayName }}
+					<small id="display-name-error" class="form-helper-text form-helper-text--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<div>
+				<label for="email" class="form-label">Email</label>	
+				<input id="email" type="text" name="email"
+					value="{{ .Values.Email }}"
+					class="form-control"
+					aria-describedby="email-error">
+				{{ with .Errors.Email }}
+					<small id="email-error" class="form-helper-text form-helper-text--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<div>
+				<label for="password" class="form-label">Password</label>	
+				<input id="password" type="password" name="password"
+					value="{{ .Values.Password }}"
+					class="form-control"
+					aria-describedby="password-error">
+				{{ with .Errors.Password }}
+					<small id="password-error" class="form-helper-text form-helper-text--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<div>
+				<label for="confirm-password" class="form-label">Confirm Password</label>	
+				<input id="confirm-password" type="password" name="confirm-password"
+					value="{{ .Values.ConfirmPassword }}"
+					class="form-control"
+					aria-describedby="confirm-password-error">
+				{{ with .Errors.ConfirmPassword }}
+					<small id="confirm-password-error" class="form-helper-text form-helper-text--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<button type="submit" class="button w-full">Submit</button>
+		</form>
+	</div>
+</main>
+{{ end }}

@@ -1,13 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"embed"
 	"flag"
-	"fmt"
-	"html/template"
-	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -59,6 +55,9 @@ func main() {
 		TemplateFS:      templatesFS,
 		NotFoundHandler: http.NotFoundHandler(),
 	})
+	handler.Handle("GET /signup", &SignupHandler{
+		TemplateFS: templatesFS,
+	})
 
 	server := http.Server{
 		Addr:         *address,
@@ -93,34 +92,4 @@ func main() {
 			server.Close()
 		}
 	}
-}
-
-type IndexHandler struct {
-	NotFoundHandler http.Handler
-	TemplateFS      fs.FS
-
-	indexTemplate *template.Template
-}
-
-func (i *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	tpl := template.Must(template.ParseFS(i.TemplateFS, "index.html"))
-	err := ExecuteTemplate(tpl, w, "index.html", nil)
-	if err != nil {
-		panic("IndexHandler: " + err.Error())
-	}
-}
-
-func ExecuteTemplate(tpl *template.Template, w http.ResponseWriter, name string, data any) error {
-	var b bytes.Buffer
-	err := tpl.ExecuteTemplate(&b, name, data)
-	if err != nil {
-		return fmt.Errorf("failed to execute template: %w", err)
-	}
-
-	_, err = io.Copy(w, &b)
-	if err != nil {
-		return fmt.Errorf("failed to write template: %w", err)
-	}
-
-	return nil
 }

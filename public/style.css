@@ -4,8 +4,10 @@
 	--color-primary: #191D23;
 	--color-primary-inverse: white;
 	--color-primary-background: var(--color-primary, #191D23);
+	--color-shadow: rgba(0, 0, 0, .15);
 
-	--radius-regular: .5rem;
+	--radius: .5rem;
+	--radius-lg: 1rem;
 	--spacing-gutter: 1.5rem;
 }
 
@@ -29,15 +31,16 @@ img {
 .button {
 	text-decoration: none;
 	border: none;
+	font-family: inherit;
 
 	display: inline-block;
-	font-weight: 700;
+	font-weight: 600;
 	font-size: inherit;
 	text-transform: uppercase;
 	color: var(--color-primary-inverse, white);
 	background-color: var(--color-primary, black);
 	padding: var(--element-padding-vertical, .875rem) var(--element-padding-horizontal, 1.5rem);
-	border-radius: var(--radius-regular);
+	border-radius: var(--radius);
 	outline-offset: .125rem;
 }
 
@@ -47,12 +50,57 @@ img {
 	box-shadow: 0 0 0 .125rem inset var(--color-primary, black);
 }
 
+.form-label {
+	font-size: .875rem;
+	text-transform: uppercase;
+	display: block;
+}
+
+.form-label + * {
+	margin-top: .25rem;
+}
+
+.form-control {
+	display: block;
+	border: none;
+	width: 100%;
+	box-shadow: 0 0 0 .125rem #D8D7D7;
+	padding: .75rem 1rem;
+	border-radius: var(--radius);
+}
+
+.card {
+	background-color: var(--color-base-background, white);
+	box-shadow: 0 2px 3px var(--color-shadow);
+	border-radius: var(--radius-lg);
+	padding: 1.5rem;
+}
+
+.card__heading {
+	margin: 0;
+	font-size: 1.875rem;
+	text-align: center;
+	text-transform: uppercase;
+	margin-bottom: 1rem;
+}
+
+.container-fluid {
+	padding-inline: var(--spacing-gutter, 2rem);
+}
+
+.container {
+	padding-inline: var(--spacing-gutter, 2rem);
+	width: 100%;
+	max-width: 75rem;
+}
+
 .navbar {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	background-color: var(--color-base-background);
 	padding: calc(var(--spacing-gutter, 2rem)/2) var(--spacing-gutter, 2rem);
+	margin-bottom: 3.12rem;
 }
 
 .navbar__logo {
@@ -67,6 +115,33 @@ img {
 .navbar__signup-link {
 	display: none;
 }
+
+/** UTILITIES **/
+
+.gap {
+	display: flex;
+	flex-direction: column;
+	gap: .5rem;
+}
+
+.w-full {
+	width: 100%;
+}
+
+.mb-block {
+	margin-bottom: 3.12rem;
+}
+
+.max-w-sm {
+	max-width: 24.5rem;
+}
+
+.mx-auto {
+	margin-inline: auto;
+}
+
+/** END **/
+
 
 @media (min-width: 460px) {
 	.navbar__signup-link {
