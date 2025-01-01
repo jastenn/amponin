@@ -350,6 +350,7 @@ func (d *DoSignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 			return
 		}
 
+		d.Log.Error("Failed to create a user local account", "reason", err.Error())
 		d.SessionStore.SetFlash(w, "Something went wrong. Please try again later.", FlashLevelError)
 		http.Redirect(w, r, d.SignupRedirectURL, http.StatusSeeOther)
 		return
@@ -357,6 +358,7 @@ func (d *DoSignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 
 	d.SessionStore.Remove(w, SessionStoreKeySignupData)
 	d.Log.Debug("New local account was registered.", "id", user.ID)
+	d.SessionStore.SetFlash(w, "Successfully signed up.", FlashLevelSuccess)
 	http.Redirect(w, r, d.SucccessRedirectURL, http.StatusSeeOther)
 }
 
