@@ -3,10 +3,20 @@
 {{ end }}
 
 {{ define "content" }}
-<main class="container">
+<main class="container mx-auto">
 	<div class="card max-w-sm mx-auto">
 		<h1 id="signup-heading" class="card__heading mx-auto">Signup</h1>
-		<form aria-labelledby="signup-heading" class="gap">
+		{{ with .Toast }}
+		<div class="card__toast
+				{{- if eq .Level `toast_error` }} card__toast--error
+				{{- else if eq .Level `toast_warn` }} card__toast--warn
+				{{- else if eq .Level `toast_success` }} card__toast--success
+				{{- end -}}
+			">
+				{{ .Message }}					
+			</div>
+		{{ end }}
+		<form action="/signup" method="post" class="gap" aria-labelledby="signup-heading">
 			<div>
 				<label for="display-name" class="form-label">Display Name</label>	
 				<input id="display-name" type="text" name="display-name"
@@ -14,7 +24,7 @@
 					class="form-control"
 					aria-describedby="display-name-error">
 				{{ with .Errors.DisplayName }}
-					<small id="display-name-error" class="form-helper-text form-helper-text--error">{{ . }}</small>
+					<small id="display-name-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
 			<div>
@@ -24,7 +34,7 @@
 					class="form-control"
 					aria-describedby="email-error">
 				{{ with .Errors.Email }}
-					<small id="email-error" class="form-helper-text form-helper-text--error">{{ . }}</small>
+					<small id="email-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
 			<div>
@@ -34,7 +44,7 @@
 					class="form-control"
 					aria-describedby="password-error">
 				{{ with .Errors.Password }}
-					<small id="password-error" class="form-helper-text form-helper-text--error">{{ . }}</small>
+					<small id="password-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
 			<div>
@@ -44,7 +54,7 @@
 					class="form-control"
 					aria-describedby="confirm-password-error">
 				{{ with .Errors.ConfirmPassword }}
-					<small id="confirm-password-error" class="form-helper-text form-helper-text--error">{{ . }}</small>
+					<small id="confirm-password-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
 			<button type="submit" class="button w-full">Submit</button>

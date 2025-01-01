@@ -1,10 +1,14 @@
 :root {
 	--color-base-text: #191D23;
+	--color-base-text-alt: white;
 	--color-base-background: white;
 	--color-primary: #191D23;
 	--color-primary-inverse: white;
 	--color-primary-background: var(--color-primary, #191D23);
 	--color-shadow: rgba(0, 0, 0, .15);
+	--color-error: #EB564C;
+	--color-warn: #F8E766;
+	--color-success: #26BA4E;
 
 	--radius: .5rem;
 	--radius-lg: 1rem;
@@ -29,6 +33,7 @@ img {
 }
 
 .button {
+	cursor: pointer;
 	text-decoration: none;
 	border: none;
 	font-family: inherit;
@@ -69,6 +74,10 @@ img {
 	border-radius: var(--radius);
 }
 
+.form-helper--error {
+	color: var(--color-error, salmonRed);
+}
+
 .card {
 	background-color: var(--color-base-background, white);
 	box-shadow: 0 2px 3px var(--color-shadow);
@@ -82,6 +91,37 @@ img {
 	text-align: center;
 	text-transform: uppercase;
 	margin-bottom: 1rem;
+}
+
+.card__subheading {
+	margin: 0;
+	margin-bottom: 1rem;
+	font-weight: 600;
+	font-size: 1.25rem;
+	text-align: center;
+}
+
+.card__toast {
+	padding: 1rem;
+	background-color: #E7EBEF;
+	border-radius: var(--radius);
+	text-align: center;
+	margin-bottom: 1rem;
+}
+
+.card__toast--error {
+	background-color: var(--color-error);
+	color: var(--color-base-text-alt);
+}
+
+.card__toast--warn {
+	background-color: var(--color-warn);
+	color: var(--color-base-text-alt);
+}
+
+.card__toast--success {
+	background-color: var(--color-success);
+	color: var(--color-base-text-alt);
 }
 
 .container-fluid {
@@ -117,6 +157,18 @@ img {
 }
 
 /** UTILITIES **/
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border-width: 0;
+}
 
 .gap {
 	display: flex;

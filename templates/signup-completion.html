@@ -1,0 +1,25 @@
+{{ define "head" }}
+	<title>Signup Completion - Amponin</title>
+{{ end }}
+
+{{ define "content" }}
+<main class="container mx-auto">
+	<div class="card max-w-sm mx-auto">
+		<h1 id="signup-heading" class="sr-only">Signup Completion</h1>
+		<p class="card__subheading">We sent a verification code to {{ .Email }}.</p>
+		<form action="/signup/completion" method="post" class="gap" aria-label="signup-completion">
+			<div>
+				<label for="code" class="form-label">Verification Code</label>	
+				<input id="code" type="text" name="code"
+					value="{{ .Code }}"
+					class="form-control"
+					aria-describedby="code-error">
+				{{ with .CodeError }}
+					<small id="code-error" class="form-helper form-helper--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<button type="submit" class="button w-full">Submit</button>
+		</form>
+	</div>
+</main>
+{{ end }}
