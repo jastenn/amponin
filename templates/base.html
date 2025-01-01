@@ -23,8 +23,12 @@
 			<a href="/" class="navbar__logo"> <img src="/public/logo-full.png" alt="Amponin"></a>
 			
 			<div class="navbar__links">
-				<a class="button button--outline navbar__signup-link" href="/signup">Signup</a>
-				<a class="button" href="#">Login</a>
+				{{ with .LoginSession }}
+					<a class="button" href="#">Logout</a>
+				{{ else }}
+					<a class="button button--outline navbar__signup-link" href="/signup">Signup</a>
+					<a class="button" href="/login">Login</a>
+				{{ end }}
 			</div>
 		</nav>
 		{{ block "header-beforeend" . }} {{ end }}

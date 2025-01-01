@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -59,6 +60,42 @@ func (p *PGStore) CreateLocalAccount(ctx context.Context, data NewLocalAccount) 
 	err = tx.Commit()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to commit transactin: %w", err)
+	}
+
+	return localAccount, user, nil
+}
+
+func (p *PGStore) GetLocalAccount(ctx context.Context, email string) (*LocalAccount, *User, error) {
+	user := &User{}
+	err := p.db.QueryRowContext(ctx,
+		`SELECT user_id, email, display_name, avatar_url,
+			created_at, updated_at
+		 FROM users
+		 WHERE email = $1`,
+		email,
+	).Scan(
+		&user.ID, &user.Email, &user.DisplayName, &user.AvatarURL,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, ErrNoLocalAccount
+		}
+		return nil, nil, fmt.Errorf("unable to query user by email: %w", err)
+	}
+
+	localAccount := &LocalAccount{}
+	err = p.db.QueryRowContext(ctx,
+		`SELECT password_hash, created_at, updated_at
+		 FROM local_accounts
+		 WHERE user_id = $1`,
+		user.ID,
+	).Scan(&localAccount.PasswordHash, &localAccount.CreatedAt, &localAccount.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, ErrNoLocalAccount
+		}
+		return nil, nil, fmt.Errorf("unable to query user's local account: %w", err)
 	}
 
 	return localAccount, user, nil

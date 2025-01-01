@@ -6,15 +6,23 @@ import (
 	"net/http"
 )
 
+type IndexTemplateData struct {
+	LoginSession *LoginSession
+	Flash        *Flash
+}
+
 type IndexHandler struct {
 	NotFoundHandler http.Handler
 	TemplateFS      fs.FS
+	SessionStore    *CookieStore
 
 	indexTemplateCache *template.Template
 }
 
 func (i *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "" && r.URL.Path != "/"  {
+	flash, _ := i.SessionStore.Flash(w, r)
+	loginSession, _ := GetLoginSession(i.SessionStore, w, r)
+	if r.URL.Path != "" && r.URL.Path != "/" {
 		i.NotFoundHandler.ServeHTTP(w, r)
 		return
 	}
@@ -26,7 +34,10 @@ func (i *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			panic("unable to parse index template: " + err.Error())
 		}
 	}
-	err := ExecuteTemplate(i.indexTemplateCache, w, "base.html", nil)
+	err := ExecuteTemplate(i.indexTemplateCache, w, "base.html", IndexTemplateData{
+		LoginSession: loginSession,
+		Flash: flash,
+	})
 	if err != nil {
 		panic("unable to execute index template: " + err.Error())
 	}

@@ -36,9 +36,10 @@ type SessionSignupData struct {
 }
 
 type SignupTemplateData struct {
-	Toast  *Flash
-	Values SignupValues
-	Errors SignupErrors
+	LoginSession *LoginSession
+	Flash        *Flash
+	Values       SignupValues
+	Errors       SignupErrors
 }
 
 type SignupValues struct {
@@ -56,14 +57,24 @@ type SignupErrors struct {
 }
 
 type SignupHandler struct {
-	TemplateFS   fs.FS
-	SessionStore *CookieStore
+	Log                 *slog.Logger
+	TemplateFS          fs.FS
+	SessionStore        *CookieStore
+	LoggedInRedirectURL string
 
 	signupTemplateCache *template.Template
 }
 
 func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	flash, _ := s.SessionStore.Flash(w, r)
+
+	loginSession, _ := GetLoginSession(s.SessionStore, w, r)
+	if loginSession != nil {
+		s.Log.Debug("User is currently logged in.", "user_id", loginSession.UserID)
+		s.SessionStore.SetFlash(w, "Please log out first before signing up.", FlashLevelError)
+		http.Redirect(w, r, s.LoggedInRedirectURL, http.StatusSeeOther)
+		return
+	}
 
 	if s.signupTemplateCache == nil {
 		var err error
@@ -73,7 +84,7 @@ func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	err := ExecuteTemplate(s.signupTemplateCache, w, "base.html", SignupTemplateData{
-		Toast: flash,
+		Flash: flash,
 	})
 	if err != nil {
 		panic("unable to execute signup template: " + err.Error())
@@ -118,7 +129,7 @@ func (d *DoSignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		d.Log.Error("Unable to save field values to session store.", "reason", err.Error())
 		d.ExecuteTemplate(w, http.StatusBadRequest, SignupTemplateData{
-			Toast: &Flash{
+			Flash: &Flash{
 				Level:   FlashLevelError,
 				Message: "Something went wrong. Please try again later.",
 			},
@@ -202,9 +213,10 @@ func (d *DoSignupHandler) ExecuteTemplate(w http.ResponseWriter, status int, dat
 }
 
 type SignupCompletionTemplateData struct {
-	Email     string
-	Code      string
-	CodeError string
+	LoginSession *LoginSession
+	Email        string
+	Code         string
+	CodeError    string
 }
 
 type SignupCompletionHandler struct {
@@ -224,11 +236,13 @@ func (d *SignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			d.Log.Debug("User haven't started the signup process. No signup values was found.")
 			d.SessionStore.SetFlash(w, "Please signup first.", FlashLevelError)
 			http.Redirect(w, r, d.SignupRedirectURL, http.StatusSeeOther)
+			return
 		}
 
 		d.Log.Error("Unable to decode signup values.", "reason", err.Error())
 		d.SessionStore.SetFlash(w, "Something went wrong, Please try again later.", FlashLevelError)
 		http.Redirect(w, r, d.SignupRedirectURL, http.StatusSeeOther)
+		return
 	}
 
 	if d.signupVerificationTemplateCache == nil {
@@ -296,6 +310,7 @@ func (d *DoSignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 			d.Log.Debug("User haven't started the signup process. No signup values was found.")
 			d.SessionStore.SetFlash(w, "Please signup first.", FlashLevelError)
 			http.Redirect(w, r, d.SignupRedirectURL, http.StatusSeeOther)
+			return
 		}
 
 		d.Log.Error("Unable to decode signup values.", "reason", err.Error())

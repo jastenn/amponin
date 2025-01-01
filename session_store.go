@@ -108,9 +108,9 @@ func (c *CookieStore) Remove(w http.ResponseWriter, key string) {
 type FlashLevel string
 
 const (
-	FlashLevelError   FlashLevel = "toast_error"
-	FlashLevelSuccess FlashLevel = "toast_success"
-	FlashLevelWarn    FlashLevel = "toast_warn"
+	FlashLevelError   FlashLevel = "flash_error"
+	FlashLevelSuccess FlashLevel = "flash_success"
+	FlashLevelWarn    FlashLevel = "flash_warn"
 )
 
 type Flash struct {
@@ -136,3 +136,4 @@ func (c *CookieStore) Flash(w http.ResponseWriter, r *http.Request) (*Flash, err
 
 	return data, nil
 }
+

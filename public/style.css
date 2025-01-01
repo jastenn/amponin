@@ -7,7 +7,7 @@
 	--color-primary-background: var(--color-primary, #191D23);
 	--color-shadow: rgba(0, 0, 0, .15);
 	--color-error: #EB564C;
-	--color-warn: #F8E766;
+	--color-warn: #F59E0B;
 	--color-success: #26BA4E;
 
 	--radius: .5rem;
@@ -30,6 +30,10 @@ body {
 
 img {
 	width: 100%;
+}
+
+header {
+	margin-bottom: 3.12rem;
 }
 
 .button {
@@ -101,7 +105,7 @@ img {
 	text-align: center;
 }
 
-.card__toast {
+.card__flash {
 	padding: 1rem;
 	background-color: #E7EBEF;
 	border-radius: var(--radius);
@@ -109,17 +113,17 @@ img {
 	margin-bottom: 1rem;
 }
 
-.card__toast--error {
+.card__flash--error {
 	background-color: var(--color-error);
 	color: var(--color-base-text-alt);
 }
 
-.card__toast--warn {
+.card__flash--warn {
 	background-color: var(--color-warn);
 	color: var(--color-base-text-alt);
 }
 
-.card__toast--success {
+.card__flash--success {
 	background-color: var(--color-success);
 	color: var(--color-base-text-alt);
 }
@@ -140,7 +144,6 @@ img {
 	justify-content: space-between;
 	background-color: var(--color-base-background);
 	padding: calc(var(--spacing-gutter, 2rem)/2) var(--spacing-gutter, 2rem);
-	margin-bottom: 3.12rem;
 }
 
 .navbar__logo {
@@ -154,6 +157,40 @@ img {
 
 .navbar__signup-link {
 	display: none;
+}
+
+.notification-bar {
+	padding: .5rem var(--spacing-gutter, 1rem);
+	background-color: #E7EBEF;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.notification-bar--error {
+	background-color: var(--color-error);
+	color: var(--color-base-text-alt);
+}
+
+.notification-bar--warn {
+	background-color: var(--color-warn);
+	color: var(--color-base-text-alt);
+}
+
+.notification-bar--success {
+	background-color: var(--color-success);
+	color: var(--color-base-text-alt);
+}
+
+.notification-bar__control {
+	background-color: transparent;
+	border: none;
+	height: 1.25rem;
+	width: 1.25rem;
+	padding: 0;
+	line-height: 1;
+	color: inherit;
+	flex-grow: 0;
 }
 
 /** UTILITIES **/

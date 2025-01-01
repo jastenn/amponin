@@ -1,11 +1,11 @@
 {{ define "head" }}
-	<title>Amponin - Signup</title>
+	<title>Amponin - Login</title>
 {{ end }}
 
 {{ define "content" }}
 <main class="container mx-auto">
 	<div class="card max-w-sm mx-auto">
-		<h1 id="signup-heading" class="card__heading mx-auto">Signup</h1>
+		<h1 id="login-heading" class="card__heading mx-auto">Login</h1>
 		{{ with .Flash }}
 		<div class="card__flash
 				{{- if eq .Level `flash_error` }} card__flash--error
@@ -16,17 +16,7 @@
 				{{ .Message }}					
 			</div>
 		{{ end }}
-		<form action="/signup" method="post" class="gap" aria-labelledby="signup-heading">
-			<div>
-				<label for="display-name" class="form-label">Display Name</label>	
-				<input id="display-name" type="text" name="display-name"
-					value="{{ .Values.DisplayName }}"
-					class="form-control"
-					aria-describedby="display-name-error">
-				{{ with .Errors.DisplayName }}
-					<small id="display-name-error" class="form-helper form-helper--error">{{ . }}</small>
-				{{ end }}
-			</div>
+		<form action="/login" method="post" class="gap" aria-labelledby="login-heading">
 			<div>
 				<label for="email" class="form-label">Email</label>	
 				<input id="email" type="text" name="email"
@@ -45,16 +35,6 @@
 					aria-describedby="password-error">
 				{{ with .Errors.Password }}
 					<small id="password-error" class="form-helper form-helper--error">{{ . }}</small>
-				{{ end }}
-			</div>
-			<div>
-				<label for="confirm-password" class="form-label">Confirm Password</label>	
-				<input id="confirm-password" type="password" name="confirm-password"
-					value="{{ .Values.ConfirmPassword }}"
-					class="form-control"
-					aria-describedby="confirm-password-error">
-				{{ with .Errors.ConfirmPassword }}
-					<small id="confirm-password-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
 			<button type="submit" class="button w-full">Submit</button>

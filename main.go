@@ -16,7 +16,7 @@ import (
 )
 
 //go:embed templates/*
-//go:embed public/*
+//go:embed public/* public/scripts/*
 var embedFS embed.FS
 
 func main() {
@@ -86,11 +86,14 @@ func main() {
 	handler.Handle("GET /public/{filename...}", http.StripPrefix("/public", http.FileServerFS(publicFS)))
 	handler.Handle("GET /", &IndexHandler{
 		TemplateFS:      templatesFS,
+		SessionStore:    cookieStore,
 		NotFoundHandler: http.NotFoundHandler(),
 	})
 	handler.Handle("GET /signup", &SignupHandler{
-		TemplateFS:   templatesFS,
-		SessionStore: cookieStore,
+		Log:                 log,
+		TemplateFS:          templatesFS,
+		SessionStore:        cookieStore,
+		LoggedInRedirectURL: "/",
 	})
 	handler.Handle("POST /signup", &DoSignupHandler{
 		Log:                     log,
@@ -109,9 +112,23 @@ func main() {
 		Log:                 log,
 		TemplateFS:          templatesFS,
 		SessionStore:        cookieStore,
-		SucccessRedirectURL: "/",
+		SucccessRedirectURL: "/login",
 		SignupRedirectURL:   "/signup",
 		LocalAccountCreator: store,
+	})
+	handler.Handle("GET /login", &LoginHandler{
+		Log:                log,
+		TemplateFS:         templatesFS,
+		SessionStore:       cookieStore,
+		SuccessRedirectURL: "/",
+	})
+	handler.Handle("POST /login", &DoLoginHandler{
+		Log:                log,
+		TemplateFS:         templatesFS,
+		SessionStore:       cookieStore,
+		SuccessRedirectURL: "/",
+		LoginSessionMaxAge: time.Hour * 24 * 7,
+		LocalAccountGetter: store,
 	})
 
 	server := http.Server{
