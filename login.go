@@ -209,3 +209,10 @@ func GetLoginSession(ss *CookieStore, w http.ResponseWriter, r *http.Request) (*
 
 	return data, nil
 }
+
+func RemoveLoginSession(ss *CookieStore, w http.ResponseWriter, r *http.Request) (*LoginSession, error) {
+	data, err := GetLoginSession(ss, w, r)
+	ss.Remove(w, SessionKeyLoginSession)
+
+	return data, err
+}

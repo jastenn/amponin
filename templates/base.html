@@ -24,7 +24,9 @@
 			
 			<div class="navbar__links">
 				{{ with .LoginSession }}
-					<a class="button" href="#">Logout</a>
+					<form action="/logout" method="post">
+						<button type="submit" class="button">Logout</button>
+					</form>
 				{{ else }}
 					<a class="button button--outline navbar__signup-link" href="/signup">Signup</a>
 					<a class="button" href="/login">Login</a>

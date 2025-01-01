@@ -130,6 +130,10 @@ func main() {
 		LoginSessionMaxAge: time.Hour * 24 * 7,
 		LocalAccountGetter: store,
 	})
+	handler.Handle("POST /logout", &DoLogout{
+		Log:          log,
+		SessionStore: cookieStore,
+	})
 
 	server := http.Server{
 		Addr:         *address,
