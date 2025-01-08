@@ -16,7 +16,8 @@ import (
 )
 
 //go:embed templates/*
-//go:embed public/* public/scripts/*
+//go:embed public/*
+//go:embed public/scripts/* public/scripts/components/*
 var embedFS embed.FS
 
 func main() {
@@ -85,6 +86,7 @@ func main() {
 	handler := http.NewServeMux()
 	handler.Handle("GET /public/{filename...}", http.StripPrefix("/public", http.FileServerFS(publicFS)))
 	handler.Handle("GET /", &IndexHandler{
+		Log:             log,
 		TemplateFS:      templatesFS,
 		SessionStore:    cookieStore,
 		NotFoundHandler: http.NotFoundHandler(),
