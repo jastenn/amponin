@@ -136,6 +136,25 @@ func main() {
 		Log:          log,
 		SessionStore: cookieStore,
 	})
+	handler.Handle("GET /shelter", &ShelterHandler{
+		Log:                log,
+		TemplateFS:         templatesFS,
+		SessionStore:       cookieStore,
+		UserSheltersFinder: store,
+	})
+	handler.Handle("GET /shelter/registration", &ShelterRegistrationHandler{
+		TemplateFS:              templatesFS,
+		SessionStore:            cookieStore,
+		UnauthorizedRedirectURL: "/login?callback=%2Fshelter%2Fregistration",
+	})
+	handler.Handle("POST /shelter/registration", &DoShelterRegistrationHandler{
+		TemplateFS:              templatesFS,
+		Log:                     log,
+		SessionStore:            cookieStore,
+		UnauthorizedRedirectURL: "/login?callback=%2Fshelter%2Fregistration",
+		ShelterCreator:          store,
+		SuccessRedirect:         "/",
+	})
 
 	server := http.Server{
 		Addr:         *address,

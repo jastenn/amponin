@@ -261,21 +261,7 @@ func (d *SignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-type User struct {
-	ID          string
-	DisplayName string
-	Email       string
-	AvatarURL   *string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-type LocalAccount struct {
-	UserID       string
-	PasswordHash []byte
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-}
+var ErrEmailInUse = errors.New("email is already in use.")
 
 type NewLocalAccount struct {
 	DisplayName  string
@@ -284,17 +270,13 @@ type NewLocalAccount struct {
 	AvatarURL    *string
 }
 
-var ErrEmailInUse = errors.New("email is already in use.")
-
-type LocalAccountCreator interface {
-	CreateLocalAccount(ctx context.Context, data NewLocalAccount) (*LocalAccount, *User, error)
-}
-
 type DoSignupCompletionHandler struct {
 	TemplateFS          fs.FS
 	Log                 *slog.Logger
 	SessionStore        *CookieStore
-	LocalAccountCreator LocalAccountCreator
+	LocalAccountCreator interface {
+		CreateLocalAccount(ctx context.Context, data NewLocalAccount) (*LocalAccount, *User, error)
+	}
 	SignupRedirectURL   string
 	SucccessRedirectURL string
 

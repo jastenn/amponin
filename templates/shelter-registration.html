@@ -1,0 +1,57 @@
+{{ define "head" }}
+	<title>Amponin - Shelter Registration</title>
+
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+		crossorigin=""/>
+	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+		integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+		crossorigin=""></script>
+	<script src="/public/scripts/components/location-input.js" defer></script>
+{{ end }}
+
+{{ define "content" }}
+<main class="container mx-auto">
+	<div class="card max-w-md mx-auto">
+		<h1 id="signup-heading" class="card__heading mx-auto">Shelter Registration</h1>
+		{{ with .Flash }}
+		<div class="card__flash
+				{{- if eq .Level `flash_error` }} card__flash--error
+				{{- else if eq .Level `flash_warn` }} card__flash--warn
+				{{- else if eq .Level `flash_success` }} card__flash--success
+				{{- end -}}
+			">
+				{{ .Message }}					
+			</div>
+		{{ end }}
+		<form action="/shelter/registration" method="post" class="gap" aria-labelledby="shelter-registration-heading">
+			<div>
+				<label for="name" class="form-label">Name</label>	
+				<input id="name" type="text" name="name"
+					value="{{ .Values.Name }}"
+					class="form-control"
+					aria-describedby="name-error">
+				{{ with .Errors.Name }}
+					<small id="name-error" class="form-helper form-helper--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<fieldset aria-describedby="location-error" class="gap">
+				<legend class="form-label">Location</legend>	
+				<location-input name="location-coordinates" value="{{ .Values.LocationCoordinates }}" class="form-control"></location-input>
+				<input name="location-address" value="{{ .Values.LocationAddress }}" type="text" class="form-control">
+				{{ with .Errors.Location }}
+					<small id="location-error" class="form-helper form-helper--error">{{ . }}</small>
+				{{ end }}
+			</fieldset>
+			<div>
+				<label for="description" class="form-label">Description</label>	
+				<textarea id="description" name="description" class="form-control">{{- .Values.Description -}}</textarea>
+				{{ with .Errors.Description }}
+					<small id="description-error" class="form-helper form-helper--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<button type="submit" class="button w-full">Submit</button>
+		</form>
+	</div>
+</main>
+{{ end }}

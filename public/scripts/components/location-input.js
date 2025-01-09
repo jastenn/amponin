@@ -8,6 +8,7 @@ customElements.define("location-input", class extends HTMLElement {
 		this._internals = this.attachInternals()
 
 		this.style.minHeight = "10rem"
+		this.style.display = "block"
 
 		if (L == null) {
 			throw new Error("L is undefined: Please include Leaflet CDN")
@@ -26,6 +27,9 @@ customElements.define("location-input", class extends HTMLElement {
 
 	attributeChangedCallback(name, _, newValue) {
 		if (name == "value") {
+			if (newValue == "") {
+				return
+			}
 			this.value = newValue
 		}
 	}

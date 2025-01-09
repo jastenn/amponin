@@ -100,3 +100,77 @@ func (p *PGStore) GetLocalAccount(ctx context.Context, email string) (*LocalAcco
 
 	return localAccount, user, nil
 }
+
+func (p *PGStore) CreateShelter(ctx context.Context, userID string, data NewShelter) (*Shelter, error) {
+	tx, err := p.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: " + err.Error())
+	}
+	defer tx.Rollback()
+
+	row := tx.QueryRowContext(ctx,
+		`INSERT INTO shelters (name, coordinates, address, description)
+		 VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326), $3, $4)
+		 RETURNING
+			shelter_id, name, address, avatar_url,
+			description, created_at, updated_at`,
+		data.Name, data.Coordinates.Longitude, data.Coordinates.Latitude, data.Description,
+	)
+
+	shelter := &Shelter{}
+	err = row.Scan(
+		&shelter.ID, &shelter.Name, &shelter.Address, &shelter.AvatarURL,
+		&shelter.Description, &shelter.CreatedAt, &shelter.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert into shelters table: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO shelter_roles (shelter_id, user_id, role)
+		 VALUES ($1, $2, $3)`,
+		shelter.ID, userID, ShelterRoleSuperAdmin,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert into shelter_roles table: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return shelter, nil
+}
+
+func (p *PGStore) FindSheltersByUserID(ctx context.Context, userID string) ([]*Shelter, error) {
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT
+			shelter_id, name, avatar_url, address,
+			description, shelters.created_at, shelters.updated_at
+		 FROM shelters
+		 JOIN shelter_roles USING(shelter_id)
+		 WHERE user_id = $1`,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to query shelters table: %w", err)
+	}
+	defer rows.Close()
+
+	var result []*Shelter
+	for rows.Next() {
+		shelter := &Shelter{}
+		err := rows.Scan(
+			&shelter.ID, &shelter.Name, &shelter.AvatarURL, &shelter.Address,
+			&shelter.Description, &shelter.CreatedAt, &shelter.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("unable to scan shelters table query: %w", err)
+		}
+
+		result = append(result, shelter)
+	}
+
+	return result, nil
+}
