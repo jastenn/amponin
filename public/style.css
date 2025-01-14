@@ -18,6 +18,8 @@
 *,
 *::before,
 *::after {
+	padding: 0;
+	margin: 0;
 	box-sizing: border-box;
 }
 
@@ -38,24 +40,6 @@ fieldset {
 	border: none;
 }
 
-header {
-	margin-bottom: 3.12rem;
-}
-
-hgroup {
-	margin-bottom: 1.25rem;
-}
-
-hgroup h1 {
-	padding: 0;
-	margin: 0;
-}
-
-h1 {
-	font-size: 1.625rem;
-	text-transform: uppercase;
-}
-
 .button {
 	cursor: pointer;
 	text-decoration: none;
@@ -71,6 +55,10 @@ h1 {
 	padding: var(--element-padding-vertical, .875rem) var(--element-padding-horizontal, 1.5rem);
 	border-radius: var(--radius);
 	outline-offset: .125rem;
+}
+
+.button--w-max {
+	width: max-content;
 }
 
 .button--outline {
@@ -137,19 +125,32 @@ textarea.form-control {
 }
 
 .card__heading {
-	margin: 0;
+	display: block;
 	font-size: 1.75rem;
+	font-weight: 700;
+	text-decoration: none;
+	color: inherit;
 	text-align: center;
 	text-transform: uppercase;
 	margin-bottom: 1rem;
 }
 
+.card__heading ~ .card__subheading {
+	margin-top: -1rem;
+}
+
+.card__heading--align-left {
+	text-align: left;
+}
+
 .card__subheading {
-	margin: 0;
 	margin-bottom: 1rem;
-	font-weight: 600;
-	font-size: 1.25rem;
+	font-size: 1.125rem;
 	text-align: center;
+}
+
+.card__subheading--align-left {
+	text-align: left;
 }
 
 .card__flash {
@@ -175,22 +176,14 @@ textarea.form-control {
 	color: var(--color-base-text-alt);
 }
 
-.with-sidebar {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--spacing, .5rem);
-}
-
-.sidebar {
-	flex-basis: var(--width, 30rem);
-	flex-grow: 1;
-}
-
-.not-sidebar {
-	flex-basis: 0;
-	flex-grow: 999;
-	min-width: 50%;
-	width: auto;
+.card__image {
+	width: 6rem;
+	height: 100%;
+	aspect-ratio: 1/1;
+	flex-shrink: 0;
+	border-radius: var(--radius, .875rem);
+	overflow: hidden;
+	margin-right: 1.25rem;
 }
 
 .container-fluid {
@@ -202,6 +195,10 @@ textarea.form-control {
 	width: 90%;
 	max-width: 75rem;
 	margin: 0 auto;
+}
+
+.header {
+	margin-bottom: 5rem;
 }
 
 .navbar {
@@ -318,6 +315,23 @@ textarea.form-control {
 	margin-right: 1rem;
 }
 
+.section-heading {
+	margin-bottom: 1.5rem;
+}
+
+.section-heading h1,
+h1.section-heading {
+	font-size: 1.85rem;
+	text-transform: uppercase;
+	font-weight: 700;
+}
+
+@media (max-width: 600px) {
+	.section-heading--with-action .button--with-icon > *:not(.button__icon) {
+		display: none;
+	}
+}
+
 /** UTILITIES **/
 
 .sr-only {
@@ -358,7 +372,7 @@ textarea.form-control {
 	width: 100%;
 }
 
-.mb-block {
+.mb-section {
 	margin-bottom: 3.12rem;
 }
 
@@ -376,6 +390,14 @@ textarea.form-control {
 
 .mx-auto {
 	margin-inline: auto;
+}
+
+.heading {
+	color: inherit;
+	text-decoration: none;
+	font-size: 1.25rem;
+	text-transform: uppercase;
+	font-weight: 700;
 }
 
 /** END **/

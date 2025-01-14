@@ -1,0 +1,33 @@
+.shelter-card-list {
+	display: grid;
+	gap: 1rem;
+	grid-template-columns: repeat(auto-fit, minmax(25rem, 1fr));
+}
+
+.section-heading--with-action {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.card--shelter {
+	display: flex;
+	align-items: center;
+}
+
+.card--shelter .card__details {
+	flex-grow: 10;
+	overflow: hidden;
+}
+
+.card--shelter .card__heading {
+	font-size: 1.5rem;
+	text-wrap: nowrap;
+	text-overflow: ellipsis;
+	overflow: hidden;
+}
+
+.card--shelter a.card__heading:hover {
+	text-decoration: underline;
+}
+

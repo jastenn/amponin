@@ -110,11 +110,11 @@ func (p *PGStore) CreateShelter(ctx context.Context, userID string, data NewShel
 
 	row := tx.QueryRowContext(ctx,
 		`INSERT INTO shelters (name, coordinates, address, description)
-		 VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326), $3, $4)
+		 VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326), $4, $5)
 		 RETURNING
 			shelter_id, name, address, avatar_url,
 			description, created_at, updated_at`,
-		data.Name, data.Coordinates.Longitude, data.Coordinates.Latitude, data.Description,
+		data.Name, data.Coordinates.Longitude, data.Coordinates.Latitude, data.Address, data.Description,
 	)
 
 	shelter := &Shelter{}

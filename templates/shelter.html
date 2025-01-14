@@ -4,6 +4,7 @@
 	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
 		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
 		crossorigin=""/>
+	<link rel="stylesheet" href="/public/styles/shelters.css">
 	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
 		integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
 		crossorigin="" defer></script>
@@ -12,20 +13,24 @@
 
 {{ define "content" }}
 <main class="container">
-	<hgroup class="with-sidebar | items-center">
-		<h1 class="not-sidebar" style="min-width: 60%;">Managed Shelter</h1>
-		<a href="/shelter/registration" class="button button--with-icon sidebar" style="--width: auto;">
-			<svg class="button__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
-				<path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v2.5h-2.5a.75.75 0 0 0 0 1.5h2.5v2.5a.75.75 0 0 0 1.5 0v-2.5h2.5a.75.75 0 0 0 0-1.5h-2.5v-2.5Z" clip-rule="evenodd" />
+	<hgroup class="section-heading section-heading--with-action">
+		<h1 style="min-width: 60%;">Managed Shelter</h1>
+		<a href="/shelter/registration" class="button button--with-icon button--w-max" style="--width: auto;">
+			<svg class="button__icon"  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+				<path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
 			</svg>
-			Register Shelter
+			<span>Register Shelter</span>
 		</a>
 	</hgroup>
-	<div>
+	<div class="shelter-card-list">
 		{{ range .ManagedShelter }}
-			<div>
-				<pre>{{ . }}</pre>
-			</div>
+			<article class="card card--shelter">
+				<img class="card__image" src="{{ with .AvatarURL -}} {{ . }} {{- else -}} /public/default-avatar-shelter.png {{- end }}" alt="{{ .Name }}'s Avatar">
+				<div class="card__details">
+					<a href="/shelter/{{ .ID }}" class="card__heading card__subheading--align-left">{{ .Name }}</a>
+					<p class="card__subheading card__subheading--align-left">{{ .Address }}</p>
+				</div>
+			</article>
 		{{ else }}
 			<div class="uppercase">No shelter was found.</div>
 		{{ end }}
