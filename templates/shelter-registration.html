@@ -11,9 +11,9 @@
 {{ end }}
 
 {{ define "content" }}
-<main class="container mx-auto">
-	<div class="card max-w-md mx-auto">
-		<h1 id="signup-heading" class="card__heading mx-auto">Shelter Registration</h1>
+<main>
+	<div class="card container-sm">
+		<h1 id="signup-heading" class="card__heading">Shelter Registration</h1>
 		{{ with .Flash }}
 		<div class="card__flash
 				{{- if eq .Level `flash_error` }} card__flash--error
@@ -50,7 +50,7 @@
 					<small id="description-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
-			<button type="submit" class="button w-full">Submit</button>
+			<button type="submit" class="button">Submit</button>
 		</form>
 	</div>
 </main>

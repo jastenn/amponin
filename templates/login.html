@@ -3,9 +3,9 @@
 {{ end }}
 
 {{ define "content" }}
-<main class="container">
-	<div class="card max-w-sm mx-auto">
-		<h1 id="login-heading" class="card__heading mx-auto">Login</h1>
+<main>
+	<div class="card container-xs">
+		<h1 id="login-heading" class="card__heading">Login</h1>
 		{{ with .Flash }}
 		<div class="card__flash
 				{{- if eq .Level `flash_error` }} card__flash--error
@@ -37,7 +37,7 @@
 					<small id="password-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
-			<button type="submit" class="button w-full">Submit</button>
+			<button type="submit" class="button">Submit</button>
 		</form>
 	</div>
 </main>

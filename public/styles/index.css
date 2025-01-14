@@ -1,0 +1,16 @@
+.pet-search {
+	display: flex;
+	flex-direction: column;
+	gap: .5rem;
+	max-width: 40rem;
+	margin: 0 auto;
+}
+
+.pet-search__group-control {
+	display: flex;
+	gap: .5rem;
+}
+
+.pet-search__group-control *:last-child {
+	flex-grow: 0;
+}

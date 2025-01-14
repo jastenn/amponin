@@ -4,6 +4,7 @@
 	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
 		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
 		crossorigin=""/>
+	<link rel="stylesheet" href="/public/styles/index.css">
 	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
 		integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
 		crossorigin=""></script>
@@ -35,22 +36,23 @@
 {{ end }}
 
 {{ define "content" }}
-	<main class="container max-w-md mx-auto">
-		<form action="/" method="get" class="card | gap"
+	<main class="container">
+		<form action="/" method="get" class="card pet-search"
 			data-js-search-form
 		>
 			<location-input
 				class="form-control"
 				name="location"
+				style="height: 15rem;"
 				{{ with .Query.Location }} value="{{ printf `%f,%f` .Latitude .Longitude }}" {{ end }}
 			></location-input>	
-			<div class="with-sidebar">
-				<select name="type" class="form-control not-sidebar">
+			<div class="pet-search__group-control">
+				<select name="type" class="form-control">
 					<option value="any" {{ if eq .Query.Type `any` }} selected {{ end }}>Any</option>
 					<option value="cat" {{ if eq .Query.Type `cat` }} selected {{ end }}>Cat</option>
 					<option value="dog" {{ if eq .Query.Type `dog` }} selected {{ end }}>Dog</option>
 				</select>	
-				<button type="submit" class="button button--with-icon sidebar | text-center" style="--width: auto;">
+				<button type="submit" class="button button--with-icon" style="--width: auto;">
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="button__icon">
 						<path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd" />
 					</svg>

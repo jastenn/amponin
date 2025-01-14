@@ -3,10 +3,10 @@
 {{ end }}
 
 {{ define "content" }}
-<main class="container">
-	<div class="card max-w-sm mx-auto">
+<main>
+	<div class="card container-xs">
 		<h1 id="signup-heading" class="sr-only">Signup Completion</h1>
-		<p class="card__subheading">We sent a verification code to {{ .Email }}.</p>
+		<p class="card__heading card__heading--sm card__heading--semibold">We sent a verification code to {{ .Email }}</p>
 		<form action="/signup/completion" method="post" class="gap" aria-label="signup-completion">
 			<div>
 				<label for="code" class="form-label">Verification Code</label>	
