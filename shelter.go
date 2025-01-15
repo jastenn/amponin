@@ -28,18 +28,23 @@ type Shelter struct {
 	UpdatedAt   time.Time
 }
 
+type ShelterWithRole struct {
+	Role    ShelterRole
+	Shelter
+}
+
 type ShelterTemplateData struct {
 	Flash          *Flash
 	LoginSession   *LoginSession
-	ManagedShelter []*Shelter
+	ManagedShelter []*ShelterWithRole
 }
 
 type ShelterHandler struct {
-	Log               *slog.Logger
-	TemplateFS        fs.FS
-	SessionStore      *CookieStore
+	Log                *slog.Logger
+	TemplateFS         fs.FS
+	SessionStore       *CookieStore
 	UserSheltersFinder interface {
-		FindSheltersByUserID(ctx context.Context, userID string) ([]*Shelter, error)
+		FindSheltersByUserID(ctx context.Context, userID string) ([]*ShelterWithRole, error)
 	}
 
 	shelterTemplateCache *template.Template

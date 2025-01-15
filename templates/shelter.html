@@ -27,6 +27,11 @@
 			<article class="card card--shelter">
 				<img class="card__image" src="{{ with .AvatarURL -}} {{ . }} {{- else -}} /public/default-avatar-shelter.png {{- end }}" alt="{{ .Name }}'s Avatar">
 				<div class="card__details">
+					<div class="role-tag">
+						{{ if eq .Role `super_admin`  }} Super Admin 
+						{{ else }} {{ .Role }}
+						{{ end }}
+					</div>
 					<a href="/shelter/{{ .ID }}" class="card__heading card__subheading--align-left">{{ .Name }}</a>
 					<p class="card__subheading card__subheading--align-left">{{ .Address }}</p>
 				</div>

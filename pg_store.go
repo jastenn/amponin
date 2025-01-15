@@ -143,11 +143,12 @@ func (p *PGStore) CreateShelter(ctx context.Context, userID string, data NewShel
 	return shelter, nil
 }
 
-func (p *PGStore) FindSheltersByUserID(ctx context.Context, userID string) ([]*Shelter, error) {
+func (p *PGStore) FindSheltersByUserID(ctx context.Context, userID string) ([]*ShelterWithRole, error) {
 	rows, err := p.db.QueryContext(ctx,
 		`SELECT
 			shelter_id, name, avatar_url, address,
-			description, shelters.created_at, shelters.updated_at
+			description, shelters.created_at, shelters.updated_at,
+			role
 		 FROM shelters
 		 JOIN shelter_roles USING(shelter_id)
 		 WHERE user_id = $1`,
@@ -158,12 +159,13 @@ func (p *PGStore) FindSheltersByUserID(ctx context.Context, userID string) ([]*S
 	}
 	defer rows.Close()
 
-	var result []*Shelter
+	var result []*ShelterWithRole
 	for rows.Next() {
-		shelter := &Shelter{}
+		shelter := &ShelterWithRole{}
 		err := rows.Scan(
-			&shelter.ID, &shelter.Name, &shelter.AvatarURL, &shelter.Address,
-			&shelter.Description, &shelter.CreatedAt, &shelter.UpdatedAt,
+			&shelter.Shelter.ID, &shelter.Shelter.Name, &shelter.Shelter.AvatarURL, &shelter.Shelter.Address,
+			&shelter.Shelter.Description, &shelter.Shelter.CreatedAt, &shelter.Shelter.UpdatedAt,
+			&shelter.Role,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("unable to scan shelters table query: %w", err)
