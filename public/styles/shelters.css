@@ -1,13 +1,17 @@
 .shelter-card-list {
 	display: grid;
 	gap: 1rem;
-	grid-template-columns: repeat(auto-fit, minmax(25rem, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(min(25rem, 100%), 1fr));
 }
 
 .section-heading--with-action {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
+}
+
+.section-heading--with-action .button {
+	flex-shrink: 0;	
 }
 
 .card--shelter {
@@ -38,3 +42,19 @@
 	text-transform: uppercase;
 	font-weight: 600;
 }
+
+@media (max-width: 600px) {
+	.section-heading--with-action .button--with-icon > *:not(.button__icon) {
+		display: none;
+	}
+
+	.section-heading--with-action .button--with-icon {
+		padding: var(--element-padding-horizontal, .875rem);	
+	}
+
+	.section-heading--with-action .button--with-icon .button__icon {
+		position: static;
+		transform: none;
+	}
+}
+

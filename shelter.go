@@ -2,11 +2,17 @@ package main
 
 import (
 	"context"
+	"errors"
 	"html/template"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"time"
+)
+
+var (
+	ErrNoShelter     = errors.New("no shelter found")
+	ErrNoShelterRole = errors.New("no shelter role found")
 )
 
 type ShelterRole string
@@ -21,7 +27,6 @@ type Shelter struct {
 	ID          string
 	Name        string
 	AvatarURL   *string
-	Coordinates Coordinates
 	Address     string
 	Description string
 	CreatedAt   time.Time
@@ -29,7 +34,7 @@ type Shelter struct {
 }
 
 type ShelterWithRole struct {
-	Role    ShelterRole
+	Role ShelterRole
 	Shelter
 }
 
@@ -254,5 +259,74 @@ func (d *DoShelterRegistrationHandler) RenderTemplate(w http.ResponseWriter, dat
 	err := ExecuteTemplate(d.shelterRegistrationTemplateCache, w, "base.html", data)
 	if err != nil {
 		panic("failed to execute shelter registration template: " + err.Error())
+	}
+}
+
+type ShelterByIDTemplateData struct {
+	LoginSession *LoginSession
+	Flash        *Flash
+	Role         ShelterRole
+	Shelter      *Shelter
+}
+
+type ShelterByIDHandler struct {
+	TemplateFS      fs.FS
+	SessionStore    *CookieStore
+	Log             *slog.Logger
+	NotFoundHandler http.Handler
+	ShelterGetter   interface {
+		GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error)
+	}
+	ShelterRoleGetterr interface {
+		GetShelterRoleByID(ctx context.Context, shelterID, userID string) (ShelterRole, error)
+	}
+
+	shelterByIDTemplateCache *template.Template
+}
+
+func (s *ShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	shelterID := r.PathValue("id")
+	flash, _ := s.SessionStore.Flash(w, r)
+	loginSession, _ := GetLoginSession(s.SessionStore, w, r)
+
+	shelter, err := s.ShelterGetter.GetShelterByID(r.Context(), shelterID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelter) {
+			s.Log.Debug("Shelter was not found.", "shelter_id", shelterID)
+			s.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+
+		panic("unable to get shelter with role: " + err.Error())
+	}
+
+	var role ShelterRole
+	if loginSession != nil {
+		var err error
+		role, err = s.ShelterRoleGetterr.GetShelterRoleByID(r.Context(), shelterID, loginSession.UserID)
+		if err != nil {
+			s.Log.Error("Unexpected error while getting shelter role.", "reason", err.Error())
+			flash = &Flash{
+				Level:   FlashLevelError,
+				Message: "Unexpected error occurred, the result might be incomplete. Please try again later.",
+			}
+		}
+	}
+
+	if s.shelterByIDTemplateCache == nil {
+		var err error
+		s.shelterByIDTemplateCache, err = template.ParseFS(s.TemplateFS, "base.html", "shelter_by_id.html")
+		if err != nil {
+			panic("unable to parse shelter by id template: " + err.Error())
+		}
+	}
+	err = ExecuteTemplate(s.shelterByIDTemplateCache, w, "base.html", ShelterByIDTemplateData{
+		LoginSession: loginSession,
+		Flash:        flash,
+		Role:         role,
+		Shelter:      shelter,
+	})
+	if err != nil {
+		panic("unable to execute shelter by id template: " + err.Error())
 	}
 }

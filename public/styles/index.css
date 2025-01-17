@@ -8,9 +8,18 @@
 
 .pet-search__group-control {
 	display: flex;
+	flex-wrap: wrap;
 	gap: .5rem;
 }
 
-.pet-search__group-control *:last-child {
-	flex-grow: 0;
+.pet-search__group-control > *:first-child {
+	flex-basis: 0;
+	flex-grow: 999;
+	min-width: 50%;
+}
+
+.pet-search__group-control > *:last-child {
+	flex-grow: 1;
+	flex-shrink: 0;
+	flex-basis: 0;
 }

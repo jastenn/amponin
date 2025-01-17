@@ -147,6 +147,14 @@ func main() {
 		SessionStore:            cookieStore,
 		UnauthorizedRedirectURL: "/login?callback=%2Fshelter%2Fregistration",
 	})
+	handler.Handle("GET /shelter/{id}", &ShelterByIDHandler{
+		Log:                log,
+		TemplateFS:         templatesFS,
+		SessionStore:       cookieStore,
+		NotFoundHandler:    http.NotFoundHandler(),
+		ShelterGetter:      store,
+		ShelterRoleGetterr: store,
+	})
 	handler.Handle("POST /shelter/registration", &DoShelterRegistrationHandler{
 		TemplateFS:              templatesFS,
 		Log:                     log,

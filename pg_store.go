@@ -176,3 +176,50 @@ func (p *PGStore) FindSheltersByUserID(ctx context.Context, userID string) ([]*S
 
 	return result, nil
 }
+
+func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error) {
+	row := p.db.QueryRowContext(
+		ctx,
+		`SELECT
+			shelter_id, name, avatar_url, address,
+			description, created_at, updated_at
+		 FROM shelters
+		 WHERE shelter_id = $1`,
+		shelterID, 
+	)
+
+	shelter := &Shelter{}
+	err := row.Scan(
+		&shelter.ID, &shelter.Name, &shelter.AvatarURL, &shelter.Address,
+		&shelter.Description, &shelter.CreatedAt, &shelter.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoShelter
+		}
+		return nil, fmt.Errorf("unable to query shelter table: %w", err)
+	}
+
+	return shelter, nil
+}
+
+func (p *PGStore) GetShelterRoleByID(ctx context.Context, shelterID, userID string) (ShelterRole, error) {
+	row := p.db.QueryRowContext(
+		ctx,
+		`SELECT role FROM shelter_roles
+		 WHERE shelter_id = $1 AND user_id = $2`,
+		shelterID, userID,
+	)
+
+	var role string
+	err := row.Scan(&role)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNoShelterRole
+		}
+
+		return "", fmt.Errorf("failed to query shelter roles table: %w", err)
+	}
+
+	return ShelterRole(role), nil
+}
