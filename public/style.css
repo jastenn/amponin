@@ -9,6 +9,7 @@
 	--color-error: #EB564C;
 	--color-warn: #F59E0B;
 	--color-success: #26BA4E;
+	--color-text-placeholder: #8C92A6;
 
 	--radius: .5rem;
 	--radius-lg: 1rem;
@@ -122,6 +123,10 @@ location-input.form-control {
 textarea.form-control {
 	resize: none;
 	min-height: 15rem;
+}
+
+select.form-control:invalid {
+	color: var(--color-text-placeholder);
 }
 
 .form-control[type="password"] {

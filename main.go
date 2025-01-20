@@ -32,6 +32,7 @@ func main() {
 	smtpEmail := flag.String("smtp-email", "", "email address to be used in sending email")
 	smtpPassword := flag.String("smtp-password", "", "password for email address in smtp authentication")
 	database := flag.String("database", "", "url to database to be used in storing data")
+	baseFileStoreDir := flag.String("base-file-store-dir", "file-store", "Base directory to be used as storage for local store")
 	flag.Parse()
 
 	if *certFile == "" {
@@ -162,6 +163,19 @@ func main() {
 		UnauthorizedRedirectURL: "/login?callback=%2Fshelter%2Fregistration",
 		ShelterCreator:          store,
 		SuccessRedirect:         "/",
+	})
+	handler.Handle("GET /shelter/{id}/post-pet", &PostPetHandler{
+		TemplateFS:   templatesFS,
+		SessionStore: cookieStore,
+	})
+	handler.Handle("POST /shelter/{id}/post-pet", &DoPetPostHandler{
+		TemplateFS:   templatesFS,
+		Log:          log,
+		SessionStore: cookieStore,
+		FileStore: &LocalFileStore{
+			BaseDir: *baseFileStoreDir,
+		},
+		PetRegistry: store,
 	})
 
 	server := http.Server{

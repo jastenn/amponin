@@ -76,14 +76,6 @@ func (i *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type PetType string
-
-const (
-	PetTypeAny PetType = "any"
-	PetTypeDog PetType = "dog"
-	PetTypeCat PetType = "cat"
-)
-
 type Coordinates struct {
 	Longitude float64
 	Latitude  float64

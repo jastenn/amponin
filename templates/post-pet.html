@@ -1,0 +1,71 @@
+{{ define "head" }}
+<title>Post Pet - Amponin</title>
+{{ end }}
+
+{{ define "content" }}
+<div class="card container-sm gap">
+	<h1 class="card__heading">Post Pet</h1>
+	{{ with .Flash }}
+		<div class="card__flash
+				{{- if eq .Level `flash_error` }} card__flash--error
+				{{- else if eq .Level `flash_warn` }} card__flash--warn
+				{{- else if eq .Level `flash_success` }} card__flash--success
+				{{- end -}}
+			">
+			{{ .Message }}					
+		</div>
+	{{ end }}
+	<form class="gap" action="/shelter/{{.ShelterID}}/post-pet" method="post" enctype="multipart/form-data">
+		<div>
+			<label class="form-label">Name</label>
+			<input type="text" name="name" value="{{ .Values.Name }}"
+				class="form-control">
+			{{ with .Errors.Name }} <small class="form-helper form-helper--error"> {{ . }} </small> {{ end }}
+		</div>
+		<div>
+			<label for="gender" class="form-label">Gender</label>
+			<select id="gender" name="gender" class="form-control">
+				<option value="" disabled {{ if eq .Values.Gender `` }} selected {{ end }}>Select Pet's Gender</option>	
+				<option value="male" {{ if eq .Values.Gender `male` }} selected {{ end }}>Male</option>	
+				<option value="female" {{ if eq .Values.Gender `female` }} selected {{ end }}>Female</option>	
+			</select>
+			{{ with .Errors.Gender }} <small class="form-helper form-helper--error"> {{ . }} </small> {{ end }}
+		</div>
+		<div>
+			<label for="type" class="form-label">Type</label>
+			<select id="type" name="type" class="form-control">
+				<option value="" disabled {{ if eq .Values.Type `` }} selected {{ end }}>Select Pet's Type</option>	
+				<option value="cat" {{ if eq .Values.Type `cat` }} selected {{ end }}>Cat</option>	
+				<option value="dog" {{ if eq .Values.Type `dog` }} selected {{ end }}>Dog</option>	
+			</select>
+			{{ with .Errors.Type }} <small class="form-helper form-helper--error"> {{ . }} </small> {{ end }}
+		</div>
+		<div>
+			<label class="form-label">Birth Date</label>
+			<input type="date" name="birth-date" value="{{ .Values.BirthDate }}"
+				class="form-control">
+			<div>
+				<input id="is-birth-date-approx" type="checkbox" name="is-birth-date-approx" {{ if eq .Values.IsBirthDateApprox `true` }} checked {{ end }} value="true">
+				<label for="is-birth-date-approx">Approx.</label>
+			</div>
+			{{ with .Errors.BirthDate }} <small class="form-helper form-helper--error"> {{ . }} </small> {{ end }}
+
+		</div>
+		<div>
+			<label for="description" class="form-label">Description</label>	
+			<textarea id="description" name="description" class="form-control">{{- .Values.Description -}}</textarea>
+			{{ with .Errors.Description }}
+				<small id="description-error" class="form-helper form-helper--error">{{ . }}</small>
+			{{ end }}
+		</div>
+		<div>
+			<label for="images" class="form-label">Images</label>	
+			<input id="images" name="images" type="file" multiple accept="image/*" class="form-control">
+			{{ with .Errors.Images }}
+				<small id="images-error" class="form-helper form-helper--error">{{ . }}</small>
+			{{ end }}
+		</div>
+		<button type="submit" class="button">Post</button>
+	</form>
+</div>
+{{ end }}

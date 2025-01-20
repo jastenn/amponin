@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/lib/pq"
 )
 
 type PGStore struct {
@@ -185,7 +187,7 @@ func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelte
 			description, created_at, updated_at
 		 FROM shelters
 		 WHERE shelter_id = $1`,
-		shelterID, 
+		shelterID,
 	)
 
 	shelter := &Shelter{}
@@ -222,4 +224,33 @@ func (p *PGStore) GetShelterRoleByID(ctx context.Context, shelterID, userID stri
 	}
 
 	return ShelterRole(role), nil
+}
+
+func (p *PGStore) RegisterPet(ctx context.Context, data NewPet) (*Pet, error) {
+	row := p.db.QueryRowContext(ctx,
+		`INSERT INTO pets (
+			shelter_id, name, pet_type, gender,
+			birth_date, is_birth_date_approx, description, image_urls
+		) VALUES (
+			$1, $2, $3, $4,
+			$5, $6, $7, $8
+		) RETURNING
+			pet_id, name, pet_type, gender,
+			birth_date, is_birth_date_approx, description, image_urls,
+			registered_at, updated_at`,
+		data.ShelterID, data.Name, data.Type, data.Gender,
+		data.BirthDate, data.IsBirthDateApprox, data.Description, pq.Array(data.ImageURLs),
+	)
+
+	pet := &Pet{}
+	err := row.Scan(
+		&pet.ID, &pet.Name, &pet.Type, &pet.Gender,
+		&pet.BirthDate, &pet.IsBirthDateApprox, &pet.Description, pq.Array(&pet.ImageURLs),
+		&pet.RegisteredAt, &pet.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to insert into pets table: %w", err)
+	}
+
+	return pet, nil
 }
