@@ -26,6 +26,7 @@ type LoginSession struct {
 type LoginTemplateData struct {
 	LoginSession *LoginSession
 	Flash        *Flash
+	CallbackURL  string
 	Values       LoginValues
 	Errors       LoginErrors
 }
@@ -50,6 +51,7 @@ type LoginHandler struct {
 }
 
 func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	callbackURL := r.FormValue("callback")
 	flash, _ := l.SessionStore.Flash(w, r)
 	loginSession, _ := GetLoginSession(l.SessionStore, w, r)
 	if loginSession != nil {
@@ -67,7 +69,8 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	err := ExecuteTemplate(l.loginTemplateCache, w, "base.html", LoginTemplateData{
-		Flash: flash,
+		Flash:       flash,
+		CallbackURL: callbackURL,
 	})
 	if err != nil {
 		panic("unable to execute login template: " + err.Error())
@@ -162,8 +165,13 @@ func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	callbackURL := r.FormValue("callback")
 	d.Log.Debug("Successfully logged in.", "user_id", user.ID)
 	d.SessionStore.SetFlash(w, "Successfully logged in.", FlashLevelSuccess)
+	if callbackURL != "" {
+		http.Redirect(w, r, callbackURL, http.StatusSeeOther)
+		return
+	}
 	http.Redirect(w, r, d.SuccessRedirectURL, http.StatusSeeOther)
 }
 
