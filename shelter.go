@@ -33,6 +33,10 @@ type Shelter struct {
 	UpdatedAt   time.Time
 }
 
+type ShelterRoleGetter interface {
+	GetShelterRoleByID(ctx context.Context, shelterID, userID string) (ShelterRole, error)
+}
+
 type ShelterWithRole struct {
 	Role ShelterRole
 	Shelter
@@ -277,9 +281,7 @@ type ShelterByIDHandler struct {
 	ShelterGetter   interface {
 		GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error)
 	}
-	ShelterRoleGetterr interface {
-		GetShelterRoleByID(ctx context.Context, shelterID, userID string) (ShelterRole, error)
-	}
+	ShelterRoleGetter ShelterRoleGetter
 
 	shelterByIDTemplateCache *template.Template
 }
@@ -303,7 +305,7 @@ func (s *ShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var role ShelterRole
 	if loginSession != nil {
 		var err error
-		role, err = s.ShelterRoleGetterr.GetShelterRoleByID(r.Context(), shelterID, loginSession.UserID)
+		role, err = s.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelterID, loginSession.UserID)
 		if err != nil {
 			s.Log.Error("Unexpected error while getting shelter role.", "reason", err.Error())
 			flash = &Flash{

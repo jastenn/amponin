@@ -85,7 +85,15 @@ func main() {
 	emailVerifier := NewGoogleMailSender(*smtpEmail, *smtpPassword)
 
 	handler := http.NewServeMux()
-	handler.Handle("GET /public/{filename...}", http.StripPrefix("/public", http.FileServerFS(publicFS)))
+	handler.Handle("GET /public/{filename...}",
+		http.StripPrefix("/public", http.FileServerFS(publicFS)),
+	)
+	handler.Handle("GET /file-store/{filename...}",
+		http.StripPrefix(
+			"/file-store",
+			NewSafeFileServer(http.Dir("file-store")),
+		),
+	)
 	handler.Handle("GET /", &IndexHandler{
 		Log:             log,
 		TemplateFS:      templatesFS,
@@ -149,12 +157,12 @@ func main() {
 		UnauthorizedRedirectURL: "/login?callback=%2Fshelter%2Fregistration",
 	})
 	handler.Handle("GET /shelter/{id}", &ShelterByIDHandler{
-		Log:                log,
-		TemplateFS:         templatesFS,
-		SessionStore:       cookieStore,
-		NotFoundHandler:    http.NotFoundHandler(),
-		ShelterGetter:      store,
-		ShelterRoleGetterr: store,
+		Log:               log,
+		TemplateFS:        templatesFS,
+		SessionStore:      cookieStore,
+		NotFoundHandler:   http.NotFoundHandler(),
+		ShelterGetter:     store,
+		ShelterRoleGetter: store,
 	})
 	handler.Handle("POST /shelter/registration", &DoShelterRegistrationHandler{
 		TemplateFS:              templatesFS,
@@ -165,13 +173,17 @@ func main() {
 		SuccessRedirect:         "/",
 	})
 	handler.Handle("GET /shelter/{id}/post-pet", &PostPetHandler{
-		TemplateFS:   templatesFS,
-		SessionStore: cookieStore,
+		TemplateFS:        templatesFS,
+		Log:               log,
+		SessionStore:      cookieStore,
+		ShelterRoleGetter: store,
+		LoginRedirectURL:  "/login?callback=%2Fshelter%2F{shelter_id}%2Fpost-pet",
 	})
 	handler.Handle("POST /shelter/{id}/post-pet", &DoPetPostHandler{
-		TemplateFS:   templatesFS,
-		Log:          log,
-		SessionStore: cookieStore,
+		TemplateFS:        templatesFS,
+		Log:               log,
+		SessionStore:      cookieStore,
+		ShelterRoleGetter: store,
 		FileStore: &LocalFileStore{
 			BaseDir: *baseFileStoreDir,
 		},

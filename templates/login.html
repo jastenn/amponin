@@ -17,6 +17,9 @@
 			</div>
 		{{ end }}
 		<form action="/login" method="post" class="gap" aria-labelledby="login-heading">
+			{{ with .CallbackURL }}
+				<input type="hidden" name="callback" value="{{ . }}">
+			{{ end }}
 			<div>
 				<label for="email" class="form-label">Email</label>	
 				<input id="email" type="text" name="email"

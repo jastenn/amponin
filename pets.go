@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -160,8 +162,11 @@ type PetPostErrors struct {
 }
 
 type PostPetHandler struct {
-	TemplateFS   fs.FS
-	SessionStore *CookieStore
+	Log               *slog.Logger
+	TemplateFS        fs.FS
+	SessionStore      *CookieStore
+	ShelterRoleGetter ShelterRoleGetter
+	LoginRedirectURL  string
 
 	postPetTemplateCache *template.Template
 }
@@ -173,6 +178,26 @@ func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	loginSession, _ := GetLoginSession(p.SessionStore, w, r)
+	if loginSession == nil {
+		p.Log.Debug("Unauthorized, user is not logged in.")
+		p.SessionStore.SetFlash(w, "Please login first.", FlashLevelError)
+		redirectURL := strings.ReplaceAll(p.LoginRedirectURL, "{shelter_id}", shelterID)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
+
+	_, err := p.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelterID, loginSession.UserID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelterRole) {
+			p.Log.Debug("User doesn't have role on shelter provided.")
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		p.Log.Error("Unable to get users role on shelter.", "reason", err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 
 	if p.postPetTemplateCache == nil {
 		var err error
@@ -181,7 +206,7 @@ func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			panic("unable to parse template: " + err.Error())
 		}
 	}
-	err := ExecuteTemplate(p.postPetTemplateCache, w, "base.html", PostPetTemplateData{
+	err = ExecuteTemplate(p.postPetTemplateCache, w, "base.html", PostPetTemplateData{
 		LoginSession: loginSession,
 		ShelterID:    shelterID,
 	})
@@ -210,20 +235,43 @@ type PetRegistry interface {
 }
 
 type DoPetPostHandler struct {
-	TemplateFS   fs.FS
-	FileStore    FileStore
-	SessionStore *CookieStore
-	Log          *slog.Logger
-	PetRegistry  PetRegistry
+	TemplateFS        fs.FS
+	FileStore         FileStore
+	SessionStore      *CookieStore
+	Log               *slog.Logger
+	PetRegistry       PetRegistry
+	ShelterRoleGetter ShelterRoleGetter
+	LoginRedirectURL  string
 
 	postPetTemplateCache *template.Template
 }
 
 func (d *DoPetPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	loginSession, _ := GetLoginSession(d.SessionStore, w, r)
 	shelterID := r.PathValue("id")
 
-	err := r.ParseMultipartForm(10_485_760)
+	loginSession, _ := GetLoginSession(d.SessionStore, w, r)
+	if loginSession == nil {
+		d.Log.Debug("Unauthorized, user is not logged in.")
+		d.SessionStore.SetFlash(w, "Please login first.", FlashLevelError)
+		redirectURL := strings.ReplaceAll(d.LoginRedirectURL, "{shelter_id}", shelterID)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
+
+	_, err := d.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelterID, loginSession.UserID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelterRole) {
+			d.Log.Debug("User doesn't have role on shelter provided.")
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		d.Log.Error("Unable to get users role on shelter.", "reason", err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	err = r.ParseMultipartForm(10_485_760)
 	if err != nil {
 		d.Log.Debug("The form is not multipart")
 		d.RenderTemplate(w, PostPetTemplateData{
