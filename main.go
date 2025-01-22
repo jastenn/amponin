@@ -17,7 +17,7 @@ import (
 
 //go:embed templates/*
 //go:embed public/*
-//go:embed public/scripts/* public/scripts/components/*
+//go:embed public/scripts/* public/scripts/components/* public/scripts/pages/*
 var embedFS embed.FS
 
 func main() {
@@ -156,6 +156,14 @@ func main() {
 		SessionStore:            cookieStore,
 		UnauthorizedRedirectURL: "/login?callback=%2Fshelter%2Fregistration",
 	})
+	handler.Handle("POST /shelter/registration", &DoShelterRegistrationHandler{
+		TemplateFS:              templatesFS,
+		Log:                     log,
+		SessionStore:            cookieStore,
+		UnauthorizedRedirectURL: "/login?callback=%2Fshelter%2Fregistration",
+		ShelterCreator:          store,
+		SuccessRedirectURL:      "/shelter/{shelter_id}",
+	})
 	handler.Handle("GET /shelter/{id}", &ShelterByIDHandler{
 		Log:               log,
 		TemplateFS:        templatesFS,
@@ -164,14 +172,6 @@ func main() {
 		ShelterGetter:     store,
 		ShelterRoleGetter: store,
 	})
-	handler.Handle("POST /shelter/registration", &DoShelterRegistrationHandler{
-		TemplateFS:              templatesFS,
-		Log:                     log,
-		SessionStore:            cookieStore,
-		UnauthorizedRedirectURL: "/login?callback=%2Fshelter%2Fregistration",
-		ShelterCreator:          store,
-		SuccessRedirect:         "/",
-	})
 	handler.Handle("GET /shelter/{id}/post-pet", &PostPetHandler{
 		TemplateFS:        templatesFS,
 		Log:               log,
@@ -179,7 +179,7 @@ func main() {
 		ShelterRoleGetter: store,
 		LoginRedirectURL:  "/login?callback=%2Fshelter%2F{shelter_id}%2Fpost-pet",
 	})
-	handler.Handle("POST /shelter/{id}/post-pet", &DoPetPostHandler{
+	handler.Handle("POST /shelter/{shelter_id}/post-pet", &DoPetPostHandler{
 		TemplateFS:        templatesFS,
 		Log:               log,
 		SessionStore:      cookieStore,
@@ -187,7 +187,16 @@ func main() {
 		FileStore: &LocalFileStore{
 			BaseDir: *baseFileStoreDir,
 		},
-		PetRegistry: store,
+		PetRegistry:        store,
+		SuccessRedirectURL: "/{pet_id}",
+	})
+	handler.Handle("GET /{pet_id}", &PetByIDHandler{
+		Log:             log,
+		SessionStore:    cookieStore,
+		NotFoundHandler: http.NotFoundHandler(),
+		TemplateFS:      templatesFS,
+		PetGetter:       store,
+		ShelterGetter:   store,
 	})
 
 	server := http.Server{

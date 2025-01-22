@@ -14,10 +14,17 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	nanoid "github.com/matoous/go-nanoid/v2"
+)
+
+var (
+	ErrNoPet = errors.New("pet not found")
 )
 
 type Pet struct {
 	ID                string
+	ShelterID         string
 	Name              string
 	Type              PetType
 	Gender            Gender
@@ -235,19 +242,20 @@ type PetRegistry interface {
 }
 
 type DoPetPostHandler struct {
-	TemplateFS        fs.FS
-	FileStore         FileStore
-	SessionStore      *CookieStore
-	Log               *slog.Logger
-	PetRegistry       PetRegistry
-	ShelterRoleGetter ShelterRoleGetter
-	LoginRedirectURL  string
+	TemplateFS         fs.FS
+	FileStore          FileStore
+	SessionStore       *CookieStore
+	Log                *slog.Logger
+	PetRegistry        PetRegistry
+	ShelterRoleGetter  ShelterRoleGetter
+	LoginRedirectURL   string
+	SuccessRedirectURL string
 
 	postPetTemplateCache *template.Template
 }
 
 func (d *DoPetPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	shelterID := r.PathValue("id")
+	shelterID := r.PathValue("shelter_id")
 
 	loginSession, _ := GetLoginSession(d.SessionStore, w, r)
 	if loginSession == nil {
@@ -320,7 +328,7 @@ func (d *DoPetPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		defer file.Close()
 
-		filename := strconv.FormatInt(time.Now().UnixMicro(), 10) + hfile.Filename
+		filename := strconv.FormatInt(time.Now().UnixMicro(), 10) + nanoid.Must(9) + hfile.Filename
 		filepath := filepath.Join("shelters", shelterID, filename)
 		url, err := d.FileStore.Save(filepath, file)
 		if err != nil {
@@ -361,9 +369,9 @@ func (d *DoPetPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	d.Log.Debug("New pet was registered.", "shelter_id", shelterID, "pet_id", pet.ID)
-
 	d.SessionStore.SetFlash(w, "New pet was registered.", FlashLevelSuccess)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	redirectURL := strings.ReplaceAll(d.SuccessRedirectURL, "{pet_id}", pet.ID)
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
 
 func (d *DoPetPostHandler) RenderTemplate(w http.ResponseWriter, data PostPetTemplateData) {
@@ -378,4 +386,93 @@ func (d *DoPetPostHandler) RenderTemplate(w http.ResponseWriter, data PostPetTem
 	if err != nil {
 		panic("unable to execute template: " + err.Error())
 	}
+}
+
+type PetByIDTempalteData struct {
+	LoginSession *LoginSession
+	Flash        *Flash
+	Pet          *Pet
+	Shelter      *Shelter
+}
+
+type PetByIDHandler struct {
+	Log             *slog.Logger
+	TemplateFS      fs.FS
+	SessionStore    *CookieStore
+	NotFoundHandler http.Handler
+	PetGetter       interface {
+		GetPetByID(ctx context.Context, petID string) (*Pet, error)
+	}
+	ShelterGetter interface {
+		GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error)
+	}
+
+	petByIDTemplateCache *template.Template
+}
+
+func (p *PetByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	loginSession, _ := GetLoginSession(p.SessionStore, w, r)
+	flash, _ := p.SessionStore.Flash(w, r)
+	petID := r.PathValue("pet_id")
+
+	pet, err := p.PetGetter.GetPetByID(r.Context(), petID)
+	if err != nil {
+		if errors.Is(err, ErrNoPet) {
+			p.Log.Debug("No pet with matching id was found.", "pet_id", petID)
+			p.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+
+		panic("unexpected error occurred: " + err.Error())
+	}
+
+	shelter, err := p.ShelterGetter.GetShelterByID(r.Context(), pet.ShelterID)
+	if err != nil {
+		panic("unexpected error occurred: " + err.Error())
+	}
+
+	if p.petByIDTemplateCache == nil {
+		p.petByIDTemplateCache, err = template.New("pet_by_id").Funcs(template.FuncMap{
+			"calc_age": CalculateAge,
+		}).ParseFS(p.TemplateFS, "base.html", "pet_by_id.html")
+		if err != nil {
+			panic("unable to parse pet_by_id.html: " + err.Error())
+		}
+	}
+
+	err = ExecuteTemplate(p.petByIDTemplateCache, w, "base.html", PetByIDTempalteData{
+		LoginSession: loginSession,
+		Flash:        flash,
+		Shelter:      shelter,
+		Pet:          pet,
+	})
+	if err != nil {
+		panic("unable to execute pet_by_id.html: " + err.Error())
+	}
+}
+
+const year = time.Hour * 24 * 365
+const month = time.Hour * 24 * 30
+
+func CalculateAge(t time.Time) string {
+	var results []string
+	age := time.Now().Sub(t)
+
+	ageInYears := age / year
+	if ageInYears == 1 {
+		results = append(results, fmt.Sprintf("%d year", ageInYears))
+	} else if ageInYears > 1 {
+		results = append(results, fmt.Sprintf("%d years", ageInYears))
+	}
+	age = age % year
+
+	ageInMonth := age / month
+	if ageInMonth == 1 {
+		results = append(results, fmt.Sprintf("%d month", ageInMonth))
+	} else if ageInMonth > 1 {
+		results = append(results, fmt.Sprintf("%d months", ageInMonth))
+	}
+
+	return strings.Join(results, " and ") + " old"
+
 }

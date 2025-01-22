@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -165,7 +166,7 @@ func (s *ShelterRegistrationHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 
 	if s.shelterRegisterTemplateCache == nil {
 		var err error
-		s.shelterRegisterTemplateCache, err = template.ParseFS(s.TemplateFS, "base.html", "shelter-registration.html")
+		s.shelterRegisterTemplateCache, err = template.ParseFS(s.TemplateFS, "base.html", "shelter_registration.html")
 		if err != nil {
 			panic("failed to parse shelter template: " + err.Error())
 		}
@@ -193,7 +194,7 @@ type DoShelterRegistrationHandler struct {
 		CreateShelter(ctx context.Context, userID string, data NewShelter) (*Shelter, error)
 	}
 	UnauthorizedRedirectURL string
-	SuccessRedirect         string
+	SuccessRedirectURL      string
 
 	shelterRegistrationTemplateCache *template.Template
 }
@@ -245,7 +246,8 @@ func (d *DoShelterRegistrationHandler) ServeHTTP(w http.ResponseWriter, r *http.
 
 	d.Log.Debug("New shelter was registered.", "shelter_id", shelter.ID)
 	d.SessionStore.SetFlash(w, "Successfully created a new shelter.", FlashLevelSuccess)
-	http.Redirect(w, r, d.SuccessRedirect, http.StatusSeeOther)
+	redirectURL := strings.ReplaceAll(d.SuccessRedirectURL, "{shelter_id}", shelter.ID)
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
 
 func (d *DoShelterRegistrationHandler) RenderTemplate(w http.ResponseWriter, data ShelterRegistrationTemplateData) {
@@ -253,7 +255,7 @@ func (d *DoShelterRegistrationHandler) RenderTemplate(w http.ResponseWriter, dat
 		var err error
 		d.shelterRegistrationTemplateCache, err = template.ParseFS(
 			d.TemplateFS,
-			"base.html", "shelter-registration.html",
+			"base.html", "shelter_registration.html",
 		)
 		if err != nil {
 			panic("failed to parse shelter registration template: " + err.Error())
@@ -281,7 +283,7 @@ type ShelterByIDHandler struct {
 	ShelterGetter   interface {
 		GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error)
 	}
-	ShelterRoleGetter ShelterRoleGetter
+	ShelterRoleGetter
 
 	shelterByIDTemplateCache *template.Template
 }

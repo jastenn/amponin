@@ -247,7 +247,7 @@ func (d *SignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 
 	if d.signupVerificationTemplateCache == nil {
 		var err error
-		d.signupVerificationTemplateCache, err = template.ParseFS(d.TemplateFS, "base.html", "signup-completion.html")
+		d.signupVerificationTemplateCache, err = template.ParseFS(d.TemplateFS, "base.html", "signup_completion.html")
 		if err != nil {
 			panic("unable to parse signup template: " + err.Error())
 		}
@@ -348,7 +348,7 @@ func (d *DoSignupCompletionHandler) ExecuteTemplate(w http.ResponseWriter, statu
 	w.WriteHeader(status)
 	if d.signupCompletionTemplateCache == nil {
 		var err error
-		d.signupCompletionTemplateCache, err = template.ParseFS(d.TemplateFS, "base.html", "signup-completion.html")
+		d.signupCompletionTemplateCache, err = template.ParseFS(d.TemplateFS, "base.html", "signup_completion.html")
 		if err != nil {
 			panic("unable to parse signup completion template: " + err.Error())
 		}

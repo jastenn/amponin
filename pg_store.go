@@ -254,3 +254,31 @@ func (p *PGStore) RegisterPet(ctx context.Context, data NewPet) (*Pet, error) {
 
 	return pet, nil
 }
+
+func (p *PGStore) GetPetByID(ctx context.Context, id string) (*Pet, error) {
+	row := p.db.QueryRowContext(ctx, 
+		`SELECT 
+			pet_id, name, pet_type, gender,
+			birth_date, image_urls, is_birth_date_approx, description,
+			shelter_id, registered_at, updated_at
+		 FROM pets
+		 WHERE pet_id = $1`,
+		id,
+	)
+
+	result := &Pet{}
+	err := row.Scan(
+		&result.ID, &result.Name, &result.Type, &result.Gender,
+		&result.BirthDate, pq.Array(&result.ImageURLs), &result.IsBirthDateApprox, &result.Description,
+		&result.ShelterID, &result.RegisteredAt, &result.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoPet
+		}
+
+		return nil, fmt.Errorf("unable to query pets table: %w", err)
+	}
+
+	return result, nil
+}
