@@ -208,7 +208,7 @@ func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if p.postPetTemplateCache == nil {
 		var err error
-		p.postPetTemplateCache, err = template.ParseFS(p.TemplateFS, "base.html", "post-pet.html")
+		p.postPetTemplateCache, err = template.ParseFS(p.TemplateFS, "base.html", "post_pet.html")
 		if err != nil {
 			panic("unable to parse template: " + err.Error())
 		}
@@ -377,7 +377,7 @@ func (d *DoPetPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (d *DoPetPostHandler) RenderTemplate(w http.ResponseWriter, data PostPetTemplateData) {
 	if d.postPetTemplateCache == nil {
 		var err error
-		d.postPetTemplateCache, err = template.ParseFS(d.TemplateFS, "base.html", "post-pet.html")
+		d.postPetTemplateCache, err = template.ParseFS(d.TemplateFS, "base.html", "post_pet.html")
 		if err != nil {
 			panic("unable to parse template: " + err.Error())
 		}
