@@ -1,5 +1,5 @@
 {{ define "head" }}
-	<title>Amponin - Find your new companion</title>
+	<title>Amponin - Find Your New Companion</title>
 
 	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
 		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
@@ -37,20 +37,15 @@
 
 {{ define "content" }}
 	<main class="container">
-		<form action="/" method="get" class="card pet-search"
-			data-js-search-form
-		>
-			<location-input
-				class="form-control"
-				name="location"
+		<form action="/pets" method="get" class="card pet-search">
+			<location-input class="form-control" name="location"
 				style="height: 15rem;"
-				{{ with .Query.Location }} value="{{ printf `%f,%f` .Latitude .Longitude }}" {{ end }}
 			></location-input>	
 			<div class="pet-search__group-control">
 				<select name="type" class="form-control">
-					<option value="any" {{ if eq .Query.Type `any` }} selected {{ end }}>Any</option>
-					<option value="cat" {{ if eq .Query.Type `cat` }} selected {{ end }}>Cat</option>
-					<option value="dog" {{ if eq .Query.Type `dog` }} selected {{ end }}>Dog</option>
+					<option value="any">Any</option>
+					<option value="cat">Cat</option>
+					<option value="dog">Dog</option>
 				</select>	
 				<button type="submit" class="button button--with-icon">
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="button__icon">

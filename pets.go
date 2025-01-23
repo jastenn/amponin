@@ -388,7 +388,125 @@ func (d *DoPetPostHandler) RenderTemplate(w http.ResponseWriter, data PostPetTem
 	}
 }
 
-type PetByIDTempalteData struct {
+type PetSearchQuery struct {
+	Location string
+	Type     string
+}
+
+type PetsTemplateData struct {
+	LoginSession *LoginSession
+	Flash        *Flash
+	FormError    string
+	Query        PetSearchQuery
+	Results      []FindPetByLocationResult
+}
+
+type FindPetByLocationResult struct {
+	Pet      *Pet
+	Distance int
+	Address  string
+}
+
+type FindPetByLocationFilter struct {
+	Type        *PetType
+	MaxDistance *int
+}
+
+type PetsHandler struct {
+	Log                 *slog.Logger
+	TemplateFS          fs.FS
+	SessionStore        *CookieStore
+	PetFinderByLocation interface {
+		FindPetByLocation(context.Context, *Coordinates, FindPetByLocationFilter) ([]FindPetByLocationResult, error)
+	}
+
+	petsTemplateCache *template.Template
+}
+
+func (i *PetsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	flash, _ := i.SessionStore.Flash(w, r)
+	loginSession, _ := GetLoginSession(i.SessionStore, w, r)
+
+	query := PetSearchQuery{
+		Location: r.FormValue("location"),
+		Type:     r.FormValue("type"),
+	}
+
+	var results []FindPetByLocationResult
+	if query.Location != "" {
+		parsedLocation, err := ParseCoordinates(query.Location)
+		if err != nil {
+			i.Log.Debug("Coordinates is invaild.", "coordinates", query.Location)
+			i.RenderTemplate(w, PetsTemplateData{
+				Flash:        flash,
+				LoginSession: loginSession,
+				FormError:    "Location is invalid.",
+				Query:        query,
+			})
+			return
+		}
+
+		var petType *PetType
+		if query.Type != "any" && query.Type != "" {
+			if query.Type != string(PetTypeCat) && query.Type != string(PetTypeDog) {
+				i.Log.Debug("Type is invaild.", "coordinates", query.Location)
+				i.RenderTemplate(w, PetsTemplateData{
+					Flash:        flash,
+					LoginSession: loginSession,
+					FormError:    "Type is invalid.",
+					Query:        query,
+				})
+				return
+			}
+			tmp := PetType(query.Type)
+			petType = &tmp
+		}
+
+		results, err = i.PetFinderByLocation.FindPetByLocation(r.Context(), parsedLocation, FindPetByLocationFilter{
+			Type: petType,
+		})
+		if err != nil {
+			i.Log.Error("Unable to find pet by location.", "reason", err.Error())
+			i.RenderTemplate(w, PetsTemplateData{
+				LoginSession: loginSession,
+				Flash: &Flash{
+					Level:   FlashLevelError,
+					Message: "Something went wrong. Please try again later.",
+				},
+				Query: query,
+			})
+			return
+		}
+	}
+
+	i.Log.Debug("Pet search by location successful.", "total_result", len(results))
+	i.RenderTemplate(w, PetsTemplateData{
+		LoginSession: loginSession,
+		Flash:        flash,
+		Query:        query,
+		Results:      results,
+	})
+}
+
+func (i *PetsHandler) RenderTemplate(w http.ResponseWriter, data PetsTemplateData) {
+	if i.petsTemplateCache == nil {
+		var err error
+		i.petsTemplateCache, err = template.New("pets.html").
+			Funcs(template.FuncMap{
+				"fmt_distance": FmtDistance,
+			}).
+			ParseFS(i.TemplateFS, "base.html", "pets.html")
+		if err != nil {
+			panic("unable to parse index template: " + err.Error())
+		}
+	}
+	err := ExecuteTemplate(i.petsTemplateCache, w, "base.html", data)
+	if err != nil {
+		panic("unable to execute index template: " + err.Error())
+	}
+}
+
+type PetByIDTemplateData struct {
 	LoginSession *LoginSession
 	Flash        *Flash
 	Pet          *Pet
@@ -440,7 +558,7 @@ func (p *PetByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	err = ExecuteTemplate(p.petByIDTemplateCache, w, "base.html", PetByIDTempalteData{
+	err = ExecuteTemplate(p.petByIDTemplateCache, w, "base.html", PetByIDTemplateData{
 		LoginSession: loginSession,
 		Flash:        flash,
 		Shelter:      shelter,
@@ -449,6 +567,39 @@ func (p *PetByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic("unable to execute pet_by_id.html: " + err.Error())
 	}
+}
+
+type Coordinates struct {
+	Longitude float64
+	Latitude  float64
+}
+
+func ParseCoordinates(s string) (*Coordinates, error) {
+	xs := strings.Split(s, ",")
+	if len(xs) != 2 {
+		return nil, errors.New("invalid coordinates")
+	}
+
+	lat, err := strconv.ParseFloat(xs[0], 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid coordinates: latitude is invalid: %w", err)
+	}
+	if lat > 90 || lat < -90 {
+		return nil, fmt.Errorf("invalid coordinates: latitude out of bounds")
+	}
+
+	lng, err := strconv.ParseFloat(xs[1], 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid coordinates: longitude is invalid float: %w", err)
+	}
+	if lng > 180 || lng < -180 {
+		return nil, fmt.Errorf("invalid coordinates: latitude out of bounds")
+	}
+
+	return &Coordinates{
+		Latitude:  lat,
+		Longitude: lng,
+	}, nil
 }
 
 const year = time.Hour * 24 * 365
@@ -475,4 +626,10 @@ func CalculateAge(t time.Time) string {
 
 	return strings.Join(results, " and ") + " old"
 
+}
+
+func FmtDistance(meters int) string {
+	kilometer := float64(meters) / 1000
+
+	return fmt.Sprintf("%.2f KM", kilometer)
 }

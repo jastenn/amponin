@@ -256,7 +256,7 @@ func (p *PGStore) RegisterPet(ctx context.Context, data NewPet) (*Pet, error) {
 }
 
 func (p *PGStore) GetPetByID(ctx context.Context, id string) (*Pet, error) {
-	row := p.db.QueryRowContext(ctx, 
+	row := p.db.QueryRowContext(ctx,
 		`SELECT 
 			pet_id, name, pet_type, gender,
 			birth_date, image_urls, is_birth_date_approx, description,
@@ -281,4 +281,59 @@ func (p *PGStore) GetPetByID(ctx context.Context, id string) (*Pet, error) {
 	}
 
 	return result, nil
+}
+
+func (p *PGStore) FindPetByLocation(ctx context.Context, location *Coordinates, filter FindPetByLocationFilter) ([]FindPetByLocationResult, error) {
+	if filter.MaxDistance == nil {
+		maxDistance := 15_000
+		filter.MaxDistance = &maxDistance
+	}
+	row, err := p.db.QueryContext(ctx,
+		`SELECT
+			p.pet_id, p.name, p.pet_type, p.gender,
+			p.birth_date, p.image_urls, p.is_birth_date_approx, p.description,
+			p.shelter_id, p.registered_at, p.updated_at,
+			Round(ST_Distance(s.coordinates, ST_SetSRID(ST_MakePoint($1, $2), 4326))),
+			s.address
+		 FROM pets p
+		 JOIN shelters s USING(shelter_id)
+		 WHERE
+			ST_Distance(s.coordinates, ST_SetSRID(ST_MakePoint($1, $2), 4326)) <= $3 AND
+			$4::PET_TYPE IS NULL OR pet_type = $4::PET_TYPE`,
+		location.Longitude, location.Latitude, filter.MaxDistance, filter.Type,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to query pet by location: %w", err)
+	}
+	defer row.Close()
+
+	var results []FindPetByLocationResult
+	for row.Next() {
+		pet := &Pet{}
+		var distance int
+		var address string
+		err := row.Scan(
+			&pet.ID, &pet.Name, &pet.Type, &pet.Gender,
+			&pet.BirthDate, pq.Array(&pet.ImageURLs), &pet.IsBirthDateApprox, &pet.Description,
+			&pet.ShelterID, &pet.RegisteredAt, &pet.UpdatedAt,
+			&distance,
+			&address,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("unable to scan pet by location query result: %w", err)
+		}
+
+		results = append(results, FindPetByLocationResult{
+			Pet:      pet,
+			Distance: distance,
+			Address: address,
+		})
+	}
+
+	err = row.Err()
+	if err != nil {
+		return nil, fmt.Errorf("something went wrong while looping through pet by location query result: %w", err)
+	}
+
+	return results, nil
 }

@@ -95,10 +95,14 @@ func main() {
 		),
 	)
 	handler.Handle("GET /", &IndexHandler{
-		Log:             log,
-		TemplateFS:      templatesFS,
-		SessionStore:    cookieStore,
-		NotFoundHandler: http.NotFoundHandler(),
+		SessionStore: cookieStore,
+		TemplateFS:   templatesFS,
+	})
+	handler.Handle("GET /pets", &PetsHandler{
+		Log:                 log,
+		SessionStore:        cookieStore,
+		TemplateFS:          templatesFS,
+		PetFinderByLocation: store,
 	})
 	handler.Handle("GET /signup", &SignupHandler{
 		Log:                 log,
