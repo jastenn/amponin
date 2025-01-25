@@ -1,0 +1,73 @@
+.shelter-profile {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: start;
+	gap: 2rem;
+}
+
+.shelter-profile__info-wrapper {
+	flex-grow: 1;
+	flex-shrink: 0;
+	flex-basis: 22rem;
+	width: auto;
+	display: grid;
+	gap: .5rem;
+}
+
+.shelter-profile__heading {
+	display: flex;
+	align-items: stretch;
+	gap: 1rem;
+}
+
+.shelter-profile__avatar:not(img) {
+	flex-grow: 0;
+	flex-shrink: 0;
+}
+
+img.shelter-profile__avatar,
+.shelter-profile__avatar img {
+	flex-grow: 0;
+	flex-shrink: 0;
+	border-radius: 9999px;
+	width: 5rem;
+	aspect-ratio: 1/1;
+}
+
+.shelter-profile__name {
+	margin-top: 0;
+	align-self: center;
+}
+
+.shelter-profile__info-item {
+	display: flex;
+	align-items: center;
+}
+
+.shelter-profile__info-item-icon {
+	width: 2rem;
+	margin-right: .75rem;
+}
+
+.shelter-profile__controls {
+	display: grid;
+	gap: .5rem;
+	margin-top: 1.5rem;
+}
+
+.shelter-profile__description {
+	margin: 0;
+	flex-grow: 9999;
+	flex-basis: 0;
+	min-width: 50%;
+}
+
+.shelter-profile__address {
+	color: inherit;
+}
+
+a.shelter-profile__address:hover,
+a.shelter-profile__address:focus {
+	text-decoration: underline;
+}
+

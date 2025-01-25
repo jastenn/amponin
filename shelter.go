@@ -29,6 +29,7 @@ type Shelter struct {
 	Name        string
 	AvatarURL   *string
 	Address     string
+	Coordinates *Coordinates
 	Description string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -65,7 +66,7 @@ func (s *ShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	loginSession, _ := GetLoginSession(s.SessionStore, w, r)
 	if s.shelterTemplateCache == nil {
 		var err error
-		s.shelterTemplateCache, err = template.ParseFS(s.TemplateFS, "base.html", "shelter.html")
+		s.shelterTemplateCache, err = template.ParseFS(s.TemplateFS, "base.html", "shelters.html")
 		if err != nil {
 			panic("failed to parse shelter template: " + err.Error())
 		}

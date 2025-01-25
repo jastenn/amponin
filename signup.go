@@ -213,6 +213,7 @@ func (d *DoSignupHandler) ExecuteTemplate(w http.ResponseWriter, status int, dat
 }
 
 type SignupCompletionTemplateData struct {
+	Flash *Flash
 	LoginSession *LoginSession
 	Email        string
 	Code         string

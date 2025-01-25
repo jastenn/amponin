@@ -184,16 +184,19 @@ func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelte
 		ctx,
 		`SELECT
 			shelter_id, name, avatar_url, address,
-			description, created_at, updated_at
+			description, created_at, updated_at,
+			ST_X(coordinates::geometry), ST_Y(coordinates::geometry)
 		 FROM shelters
 		 WHERE shelter_id = $1`,
 		shelterID,
 	)
 
 	shelter := &Shelter{}
+	coordinates := &Coordinates{}
 	err := row.Scan(
 		&shelter.ID, &shelter.Name, &shelter.AvatarURL, &shelter.Address,
 		&shelter.Description, &shelter.CreatedAt, &shelter.UpdatedAt,
+		&coordinates.Longitude, &coordinates.Latitude,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -201,6 +204,8 @@ func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelte
 		}
 		return nil, fmt.Errorf("unable to query shelter table: %w", err)
 	}
+
+	shelter.Coordinates = coordinates
 
 	return shelter, nil
 }

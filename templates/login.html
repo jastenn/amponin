@@ -32,8 +32,7 @@
 			</div>
 			<div>
 				<label for="password" class="form-label">Password</label>	
-				<input id="password" type="password" name="password"
-					value="{{ .Values.Password }}"
+				<input id="password" type="password" name="password" value="{{ .Values.Password }}"
 					class="form-control"
 					aria-describedby="password-error">
 				{{ with .Errors.Password }}

@@ -4,7 +4,8 @@
 	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
 		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
 		crossorigin=""/>
-	<link rel="stylesheet" href="/public/styles/index.css">
+	<link rel="stylesheet" href="/public/styles/components/pet-search.css">
+
 	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
 		integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
 		crossorigin=""></script>
@@ -20,13 +21,12 @@
 				{{- if eq .Level `flash_error` }} notification-bar--error
 				{{- else if eq .Level `flash_warn` }} notification-bar--warn
 				{{- else if eq .Level `flash_success` }} notification-bar--success
-				{{- end -}}
-			">
+				{{- end -}}">
 			{{ .Message }}	
 			<button type="button"
 				data-js-notification-bar-control
 				class="notification-bar__control" aria-label="Close Notification" aria-controls="notification-bar"
-				>
+			>
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="2 2 12 12" fill="currentColor">
 					<path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
 				</svg>
@@ -47,7 +47,7 @@
 					<option value="cat">Cat</option>
 					<option value="dog">Dog</option>
 				</select>	
-				<button type="submit" class="button button--with-icon">
+				<button type="submit" class="button">
 					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="button__icon">
 						<path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd" />
 					</svg>

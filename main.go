@@ -17,6 +17,7 @@ import (
 
 //go:embed templates/*
 //go:embed public/*
+//go:embed public/styles/* public/styles/components/* public/styles/pages/*
 //go:embed public/scripts/* public/scripts/components/* public/scripts/pages/*
 var embedFS embed.FS
 

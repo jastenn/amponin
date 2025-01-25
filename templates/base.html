@@ -5,7 +5,7 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 
-	<link href="/public/style.css" rel="stylesheet">
+	<link href="/public/styles/common.css" rel="stylesheet">
 	<link rel="apple-touch-icon" sizes="180x180" href="/public/apple-touch-icon.png">
 	<link rel="icon" type="image/png" sizes="32x32" href="/public/favicon-32x32.png">
 	<link rel="icon" type="image/png" sizes="16x16" href="/public/favicon-16x16.png">
@@ -15,6 +15,7 @@
 	<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
 	
 	<script src="/public/scripts/menu.js" defer></script>
+	<script src="/public/scripts/notification-bar.js" defer></script>
 
 	{{ block "head" . }} {{ end }}
 </head>
@@ -22,34 +23,32 @@
 <body>
 	<header class="header">
 		<nav class="navbar">
-			<a href="/" class="navbar__logo"> <img src="/public/logo-full.png" alt="Amponin"></a>
+			<a href="/" class="logo"> <img src="/public/logo-full.png" alt="Amponin"></a>
 			
-			<div class="navbar__links">
+			<div class="links">
 				{{ with .LoginSession }}
-					<div class="user-menu">
-						<button type="button" class="user-menu__button"
-							data-js-menu
-							data-js-target="#user-menu-items"
-							data-js-target-active-class="user-menu__items--active"
+					<div class="nav-user-menu" data-js-menu data-js-active-class="nav-user-menu--active">
+						<button type="button" class="nav-user-menu__control"
+							data-js-control
 						>
 							<img src="/public/default-avatar-user.png" alt="User Menu">
 						</button>
-						<div id="user-menu-items" class="user-menu__items">
-							<a href="#" class="user-menu__item">
-								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="user-menu__item-logo">
+						<div class="nav-user-menu__items">
+							<a href="#" class="nav-user-menu__item">
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="nav-user-menu__item-logo">
 									<path d="M47.6 300.4L228.3 469.1c7.5 7 17.4 10.9 27.7 10.9s20.2-3.9 27.7-10.9L464.4 300.4c30.4-28.3 47.6-68 47.6-109.5v-5.8c0-69.9-50.5-129.5-119.4-141C347 36.5 300.6 51.4 268 84L256 96 244 84c-32.6-32.6-79-47.5-124.6-39.9C50.5 55.6 0 115.2 0 185.1v5.8c0 41.5 17.2 81.2 47.6 109.5z" fill="currentColor"/>
 								</svg>
 								<span>Saved</span>
 							</a>
-							<a href="/shelter" class="user-menu__item">
-								<svg viewBox="0 0 59 47" fill="none" xmlns="http://www.w3.org/2000/svg" class="user-menu__item-logo">
+							<a href="/shelter" class="nav-user-menu__item">
+								<svg viewBox="0 0 59 47" fill="none" xmlns="http://www.w3.org/2000/svg" class="nav-user-menu__item-logo">
 									<path d="M28.7178 12.193L9.83411 28.1255V45.3212C9.83411 45.7665 10.0068 46.1935 10.3141 46.5083C10.6214 46.8231 11.0382 47 11.4729 47L22.9504 46.9696C23.3836 46.9674 23.7983 46.7895 24.1038 46.4749C24.4094 46.1603 24.5809 45.7346 24.5809 45.2908V35.2487C24.5809 34.8035 24.7536 34.3765 25.0609 34.0616C25.3682 33.7468 25.7851 33.5699 26.2197 33.5699H32.7747C33.2094 33.5699 33.6262 33.7468 33.9335 34.0616C34.2408 34.3765 34.4135 34.8035 34.4135 35.2487V45.2835C34.4128 45.5044 34.4547 45.7232 34.5368 45.9275C34.6188 46.1318 34.7394 46.3175 34.8917 46.4739C35.0439 46.6304 35.2248 46.7545 35.424 46.8392C35.6231 46.9239 35.8366 46.9675 36.0523 46.9675L47.5256 47C47.9603 47 48.3771 46.8231 48.6844 46.5083C48.9918 46.1935 49.1644 45.7665 49.1644 45.3212V28.114L30.2848 12.193C30.0629 12.0098 29.7864 11.9098 29.5013 11.9098C29.2162 11.9098 28.9397 12.0098 28.7178 12.193ZM58.5463 23.0221L49.9838 15.7919V1.25907C49.9838 0.925143 49.8543 0.604894 49.6238 0.368773C49.3933 0.132652 49.0807 0 48.7547 0H43.0191C42.6931 0 42.3805 0.132652 42.15 0.368773C41.9195 0.604894 41.79 0.925143 41.79 1.25907V8.87749L32.6201 1.1489C31.7401 0.407077 30.6358 0.00148292 29.4962 0.00148292C28.3565 0.00148292 27.2523 0.407077 26.3723 1.1489L0.446049 23.0221C0.321593 23.1275 0.218625 23.2569 0.143029 23.4031C0.0674329 23.5492 0.0206902 23.7092 0.00547158 23.8739C-0.009747 24.0386 0.00685685 24.2047 0.0543344 24.3628C0.101812 24.5209 0.179233 24.6678 0.282173 24.7953L2.89395 28.0479C2.99661 28.1757 3.12288 28.2816 3.26554 28.3594C3.40819 28.4373 3.56443 28.4855 3.72531 28.5014C3.88618 28.5173 4.04854 28.5005 4.20308 28.452C4.35762 28.4035 4.5013 28.3243 4.62592 28.2189L28.7178 7.89122C28.9397 7.70794 29.2162 7.608 29.5013 7.608C29.7864 7.608 30.0629 7.70794 30.2848 7.89122L54.3777 28.2189C54.5021 28.3243 54.6456 28.4036 54.7999 28.4523C54.9542 28.5009 55.1164 28.5179 55.2772 28.5023C55.4379 28.4868 55.5941 28.4389 55.7368 28.3614C55.8794 28.284 56.0058 28.1785 56.1087 28.051L58.7204 24.7984C58.8233 24.6702 58.9004 24.5225 58.9473 24.3637C58.9942 24.205 59.01 24.0382 58.9939 23.8732C58.9777 23.7081 58.9298 23.5479 58.853 23.4019C58.7762 23.2558 58.672 23.1267 58.5463 23.0221Z" fill="currentColor"/>
 								</svg>
 								<span>Shelters</span>
 							</a>
 							<form action="/logout" method="post">
-								<button type="submit" class="user-menu__item user-menu__item--logout">
-									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" class="user-menu__item-logo">
+								<button type="submit" class="nav-user-menu__item button button--text | text-error">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" class="nav-user-menu__item-logo">
 										<path d="M320 32c0-9.9-4.5-19.2-12.3-25.2S289.8-1.4 280.2 1l-179.9 45C79 51.3 64 70.5 64 92.5L64 448l-32 0c-17.7 0-32 14.3-32 32s14.3 32 32 32l64 0 192 0 32 0 0-32 0-448zM256 256c0 17.7-10.7 32-24 32s-24-14.3-24-32s10.7-32 24-32s24 14.3 24 32zm96-128l96 0 0 352c0 17.7 14.3 32 32 32l64 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-32 0 0-320c0-35.3-28.7-64-64-64l-96 0 0 64z" fill="currentColor"/>
 									</svg>
 									<span>Logout</span>
@@ -58,14 +57,36 @@
 						</div>
 					</div>
 				{{ else }}
-					<a class="button button--outline navbar__signup-link" href="/signup">Signup</a>
+					<a class="button button--outline" href="/signup">Signup</a>
 					<a class="button" href="/login">Login</a>
 				{{ end }}
 			</div>
 		</nav>
+			 
 		{{ block "header-beforeend" . }} {{ end }}
+
 	</header>
 	{{ block "content" . }} {{ end }}
 </body>
 
 </html>
+
+{{ define "notification-bar" }}
+	<div id="notification-bar"
+		data-js-notification-bar
+		class="notification-bar"
+		level=" {{- if eq .Level `flash_error` -}} error
+			{{- else if eq .Level `flash_warn` -}} warn
+			{{- else if eq .Level `flash_success` -}} success
+			{{- end -}}">
+		{{ .Message }}	
+		<button type="button"
+			data-js-notification-bar-control
+			class="control" aria-label="Close Notification" aria-controls="notification-bar"
+		>
+			<svg xmlns="http://www.w3.org/2000/svg" viewBox="2 2 12 12" fill="currentColor">
+				<path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
+			</svg>
+		</button>
+	</div>
+{{ end }}

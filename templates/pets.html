@@ -4,12 +4,12 @@
 	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
 		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
 		crossorigin=""/>
-	<link rel="stylesheet" href="/public/styles/pets.css">
+	<link rel="stylesheet" href="/public/styles/components/pet-search.css">
+	<link rel="stylesheet" href="/public/styles/pages/pets.css">
 	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
 		integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
 		crossorigin=""></script>
 	<script src="/public/scripts/components/location-input.js" defer></script>
-	<script src="/public/scripts/notification-bar.js" defer></script>
 {{ end }}
 
 {{ define "header-beforeend" }}
@@ -20,13 +20,12 @@
 				{{- if eq .Level `flash_error` }} notification-bar--error
 				{{- else if eq .Level `flash_warn` }} notification-bar--warn
 				{{- else if eq .Level `flash_success` }} notification-bar--success
-				{{- end -}}
-			">
+				{{- end -}}">
 			{{ .Message }}	
 			<button type="button"
 				data-js-notification-bar-control
 				class="notification-bar__control" aria-label="Close Notification" aria-controls="notification-bar"
-				>
+			>
 				<svg xmlns="http://www.w3.org/2000/svg" viewBox="2 2 12 12" fill="currentColor">
 					<path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
 				</svg>
@@ -37,7 +36,7 @@
 
 {{ define "content" }}
 	<main class="container">
-		<form action="/pets" method="get" class="card search-form">
+		<form action="/pets" method="get" class="card pet-search">
 			<location-input
 				class="form-control"
 				name="location"
@@ -49,7 +48,7 @@
 				{{ . }}
 			</div>
 			{{ end }}
-			<div class="search-form__group-control">
+			<div class="pet-search__group-control">
 				<select name="type" class="form-control">
 					<option value="any" {{ if eq .Query.Type `any` }} selected {{ end }}>Any</option>
 					<option value="cat" {{ if eq .Query.Type `cat` }} selected {{ end }}>Cat</option>
@@ -64,21 +63,21 @@
 			</div>
 		</form>
 
-		<div class="results">
+		<div class="pet-result-list">
 			{{ range .Results }}
-			<div class="result-item card">
-				<img class="result-item__image" src="{{ index .Pet.ImageURLs 1 }}" alt="">
-				<p class="result-item__distance">{{ fmt_distance .Distance }} AWAY</p>
-				<div class="result-item__heading">
+			<div class="pet-result card">
+				<img class="pet-result__image" src="{{ index .Pet.ImageURLs 0 }}" alt="">
+				<p class="pet-result__distance">{{ fmt_distance .Distance }} AWAY</p>
+				<div class="pet-result__hgroup">
 					{{ if eq .Pet.Gender `female` }}
-						<div class="result-item__gender result-item__gender--female">
+						<div class="pet-result__gender pet-result__gender--female">
 							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512">
 								<path d="M80 176a112 112 0 1 1 224 0A112 112 0 1 1 80 176zM224 349.1c81.9-15 144-86.8 144-173.1C368 78.8 289.2 0 192 0S16 78.8 16 176c0 86.3 62.1 158.1 144 173.1l0 34.9-32 0c-17.7 0-32 14.3-32 32s14.3 32 32 32l32 0 0 32c0 17.7 14.3 32 32 32s32-14.3 32-32l0-32 32 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-32 0 0-34.9z" fill="currentColor"/>
 							</svg>
 							<span class="sr-only">Female</span>
 						</div>
 					{{ else if eq .Pet.Gender `male` }}
-						<div class="result-item__gender result-item__gender--male">
+						<div class="pet-result__gender pet-result__gender--male">
 							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
 								<path d="M289.8 46.8c3.7-9 12.5-14.8 22.2-14.8l112 0c13.3 0 24 10.7 24 24l0 112c0 9.7-5.8 18.5-14.8 22.2s-19.3 1.7-26.2-5.2l-33.4-33.4L321 204.2c19.5 28.4 31 62.7 31 99.8c0 97.2-78.8 176-176 176S0 401.2 0 304s78.8-176 176-176c37 0 71.4 11.4 99.8 31l52.6-52.6L295 73c-6.9-6.9-8.9-17.2-5.2-26.2zM400 80s0 0 0 0s0 0 0 0s0 0 0 0zM176 416a112 112 0 1 0 0-224 112 112 0 1 0 0 224z" fill="currentColor"/>
 							</svg>
@@ -87,10 +86,9 @@
 					{{ end }}
 					<a href="/{{ .Pet.ID }}">{{ .Pet.Name }}</a>
 				</div>
-				<p class="result-item__address">{{ .Address }}</p>
+				<p class="pet-result__address">{{ .Address }}</p>
 			</div>
 			{{ end }}
 		</div>
-
 	</main>
 {{ end }}
