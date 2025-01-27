@@ -58,6 +58,7 @@
 }
 
 .shelter-result__name {
+	text-decoration: none;
 	display: block;
 	color: inherit;
 	font-weight: 700;

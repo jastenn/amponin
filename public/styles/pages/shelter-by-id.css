@@ -63,6 +63,7 @@ img.shelter-profile__avatar,
 }
 
 .shelter-profile__address {
+	text-decoration: underline;
 	color: inherit;
 }
 
