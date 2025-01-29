@@ -31,7 +31,7 @@
 						<button type="button" class="nav-user-menu__control"
 							data-js-control
 						>
-							<img src="/public/default-avatar-user.png" alt="User Menu">
+							<img src="{{ with .AvatarURL -}} {{ . }} {{- else -}} /public/default-avatar-user.png {{- end }}" alt="User Menu">
 						</button>
 						<div class="card card--modal card--no-padding nav-user-menu__items">
 							<a href="/user-settings" class="nav-user-menu__item">

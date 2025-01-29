@@ -1,0 +1,124 @@
+{{ define "head" }}
+	<title>Account Settings - Amponin</title>
+	<link rel="stylesheet" href="/public/styles/pages/account-settings.css">
+{{ end }}
+
+{{ define "content" }}
+<main>
+	<div class="card container-xs account-settings">
+		<h1 id="login-heading" class="card__heading">Account Settings</h1>
+		<div class="account-settings__items">
+			<div class="account-settings__item">
+				<div class="account-settings__item-hgroup">
+					<h2 class="account-settings__item-heading">General</h2>
+					{{ if ne .Focus `general` }} 
+						<a class="account-settings__item-update-link" href="/account-settings?focus=general">Update</a>
+					{{ end }}
+				</div>
+				{{ if eq .Focus `general` }}
+					<form target="/account-settings?update=general" method="post" class="account-settings__item-content">
+						<div>
+							<label class="form-label">Avatar</label>
+							<input type="file" name="avatar">
+							{{ with .GeneralUpdateErrors.Avatar }}
+								<small class="form-helper form-helper--error">{{ . }}</small>
+							{{ end }}
+						</div>
+						<div>
+							<label for="display-name" class="form-label">Display Name</label>	
+							<input id="display-name" type="text" name="display-name" value="{{ .GeneralUpdateValues.DisplayName }}"
+								class="form-control">
+							{{ with .GeneralUpdateErrors.DisplayName }}
+								<small class="form-helper form-helper--error">{{ . }}</small>
+							{{ end }}
+						</div>
+						<div class="account-settings__focus-item-controls">
+							<a href="/account-settings" class="button button--outline">Cancel</a>
+							<button type="submit" class="button">Apply</button>
+						</div>
+					</form>
+				{{ else }}
+					<div class="account-settings__item-content">
+						<div>
+							<div class="form-label account-settings__item-content-label">Avatar</div>
+							<img class="account-settings__avatar account-settings__item-content-value account-settings__item-content-value--avatar" src="{{ with .User.AvatarURL -}} {{ . }} {{- else -}} /public/default-avatar-user.png {{- end }}" alt="User Menu">
+						</div>
+						<div>
+							<div class="form-label account-settings__item-content-label">Display Name</div>
+							<div class="account-settings__item-content-value"> {{ .User.DisplayName }} </div>
+						</div>
+					</div>
+				{{ end }}
+			</div>	
+			<div class="account-settings__item">
+				<div class="account-settings__item-hgroup">
+					<h2 class="account-settings__item-heading">Email</h2>
+					{{ if ne .Focus `email` }}
+						<a class="account-settings__item-update-link" href="/account-settings?focus=email">Update</a>
+					{{ end }}
+				</div>
+				{{ if eq .Focus `email` }}
+					<form target="/account-settings?update=email" method="post" class="account-settings__item-content">
+						<div>
+							<label for="email" class="form-label">Email</label>	
+							<input id="email" type="text" name="email" value="{{ .EmailUpdateValue }}"
+								class="form-control">
+							{{ with .EmailUpdateError }}
+								<small class="form-helper form-helper--error">{{ . }}</small>
+							{{ end }}
+						</div>
+						<div class="account-settings__focus-item-controls">
+							<a href="/account-settings" class="button button--outline">Cancel</a>
+							<button type="submit" class="button">Apply</button>
+						</div>
+					</form>
+				{{ else }}
+					<div class="account-settings__item-content">{{ .User.Email }}</div>
+				{{ end }}
+			</div>	
+			<div class="account-settings__item">
+				<div class="account-settings__item-hgroup">
+					<h2 class="account-settings__item-heading">Password</h2>
+					{{ if ne .Focus `password` }}
+						<a class="account-settings__item-update-link" href="/account-settings?focus=password">Update</a>
+					{{ end }}
+				</div>
+				{{ if eq .Focus `password` }}
+					<form target="/account-settings?update=password" method="post" class="account-settings__item-content">
+						<div>
+							<label for="current-password" class="form-label">Current Password</label>	
+							<input id="current-password" type="password" name="current-password" value="{{ .PasswordUpdateValues.CurrentPassword }}"
+								class="form-control">
+							{{ with .PasswordUpdateErrors.CurrentPassword }}
+								<small class="form-helper form-helper--error">{{ . }}</small>
+							{{ end }}
+						</div>
+						<div>
+							<label for="new-password" class="form-label">New Password</label>	
+							<input id="new-password" type="password" name="new-password" value="{{ .PasswordUpdateValues.NewPassword }}"
+								class="form-control">
+							{{ with .PasswordUpdateErrors.NewPassword }}
+								<small class="form-helper form-helper--error">{{ . }}</small>
+							{{ end }}
+						</div>
+						<div>
+							<label for="confirm-password" class="form-label">Confirm Password</label>	
+							<input id="confirm-password" type="password" name="confirm-password" value="{{ .PasswordUpdateValues.ConfirmPassword }}"
+								class="form-control">
+							{{ with .PasswordUpdateErrors.ConfirmPassword }}
+								<small class="form-helper form-helper--error">{{ . }}</small>
+							{{ end }}
+						</div>
+						<div class="account-settings__focus-item-controls">
+							<a href="/account-settings" class="button button--outline">Cancel</a>
+							<button type="submit" class="button">Apply</button>
+						</div>
+					</form>
+				{{ else }}
+					<div class="account-settings__item-content">**********</div>
+				{{ end }}
+			</div>	
+		</div>
+	</div>
+</main>
+{{ end }}

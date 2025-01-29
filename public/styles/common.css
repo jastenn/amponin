@@ -106,10 +106,13 @@ h4 {
 	font-weight: 600;
 	font-size: inherit;
 	text-transform: uppercase;
+	text-align: center;
 	background-color: var(--color-primary);
 	border-radius: var(--form-element-radius);
 	border: none;
 	outline-offset: .125rem;
+	font-size: inherit;
+	line-height: 1.1;
 }
 
 a.button {
@@ -125,6 +128,7 @@ a.button {
 .button--text {
 	border: none;
 	background-color: transparent;
+	color: var(--color-primary, black);
 }
 
 .button:where(:has(> .button__icon)) {

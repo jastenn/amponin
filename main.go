@@ -150,6 +150,13 @@ func main() {
 		Log:          log,
 		SessionStore: cookieStore,
 	})
+	handler.Handle("GET /account-settings", &AccountSettingsHandler{
+		Log:              log,
+		TemplateFS:       templatesFS,
+		SessionStore:     cookieStore,
+		UserGetterByID:   store,
+		LoginRedirectURL: "/login?callback=%2Faccount-settings",
+	})
 	handler.Handle("GET /shelter", &ShelterHandler{
 		Log:                log,
 		TemplateFS:         templatesFS,

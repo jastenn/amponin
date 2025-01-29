@@ -103,6 +103,28 @@ func (p *PGStore) GetLocalAccount(ctx context.Context, email string) (*LocalAcco
 	return localAccount, user, nil
 }
 
+func (p *PGStore) GetUserByID(ctx context.Context, userID string) (*User, error) {
+	user := &User{}
+	err := p.db.QueryRowContext(ctx,
+		`SELECT user_id, email, display_name, avatar_url,
+			created_at, updated_at
+		 FROM users
+		 WHERE user_id = $1`,
+		userID,
+	).Scan(
+		&user.ID, &user.Email, &user.DisplayName, &user.AvatarURL,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoUser
+		}
+		return nil, fmt.Errorf("unable to query user by user_id: %w", err)
+	}
+
+	return user, nil
+}
+
 func (p *PGStore) CreateShelter(ctx context.Context, userID string, data NewShelter) (*Shelter, error) {
 	tx, err := p.db.Begin()
 	if err != nil {
@@ -331,7 +353,7 @@ func (p *PGStore) FindPetByLocation(ctx context.Context, location *Coordinates, 
 		results = append(results, FindPetByLocationResult{
 			Pet:      pet,
 			Distance: distance,
-			Address: address,
+			Address:  address,
 		})
 	}
 

@@ -20,7 +20,7 @@ var (
 type LoginSession struct {
 	UserID      string
 	DisplayName string
-	Avatar      *string
+	AvatarURL   *string
 }
 
 type LoginTemplateData struct {
@@ -149,7 +149,7 @@ func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	loginSession := &LoginSession{
 		UserID:      user.ID,
-		Avatar:      user.AvatarURL,
+		AvatarURL:   user.AvatarURL,
 		DisplayName: user.DisplayName,
 	}
 	err = d.SessionStore.Encode(w, SessionKeyLoginSession, loginSession, d.LoginSessionMaxAge)
