@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/alexedwards/scs/v2"
 )
 
 var (
@@ -46,14 +48,14 @@ type ShelterWithRole struct {
 
 type ShelterTemplateData struct {
 	Flash          *Flash
-	LoginSession   *LoginSession
+	LoginSession   *SessionUser
 	ManagedShelter []*ShelterWithRole
 }
 
 type ShelterHandler struct {
 	Log                *slog.Logger
 	TemplateFS         fs.FS
-	SessionStore       *CookieStore
+	SessionManager     *scs.SessionManager
 	UserSheltersFinder interface {
 		FindSheltersByUserID(ctx context.Context, userID string) ([]*ShelterWithRole, error)
 	}
@@ -62,8 +64,8 @@ type ShelterHandler struct {
 }
 
 func (s *ShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	flash, _ := s.SessionStore.Flash(w, r)
-	loginSession, _ := GetLoginSession(s.SessionStore, w, r)
+	flash, _ := PopSessionFlash(s.SessionManager, r.Context())
+	loginSession, _ := GetSessionUser(s.SessionManager, r.Context())
 	if s.shelterTemplateCache == nil {
 		var err error
 		s.shelterTemplateCache, err = template.ParseFS(s.TemplateFS, "base.html", "shelters.html")
@@ -92,7 +94,7 @@ func (s *ShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type ShelterRegistrationTemplateData struct {
-	LoginSession *LoginSession
+	LoginSession *SessionUser
 	Flash        *Flash
 	Values       ShelterRegistrationValues
 	Errors       ShelterRegistrationErrors
@@ -151,16 +153,19 @@ func ValidateShelterRegistrationValues(values ShelterRegistrationValues) (errors
 
 type ShelterRegistrationHandler struct {
 	TemplateFS              fs.FS
-	SessionStore            *CookieStore
+	SessionStore            *scs.SessionManager
 	UnauthorizedRedirectURL string
 
 	shelterRegisterTemplateCache *template.Template
 }
 
 func (s *ShelterRegistrationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	loginSession, _ := GetLoginSession(s.SessionStore, w, r)
+	loginSession, _ := GetSessionUser(s.SessionStore, r.Context())
 	if loginSession == nil {
-		s.SessionStore.SetFlash(w, "Unauthorized, Please signup first.", FlashLevelError)
+		PutSessionFlash(
+			s.SessionStore, r.Context(),
+			"Unauthorized, Please signup first.", FlashLevelError,
+		)
 		http.Redirect(w, r, s.UnauthorizedRedirectURL, http.StatusSeeOther)
 		return
 	}
@@ -190,7 +195,7 @@ type NewShelter struct {
 type DoShelterRegistrationHandler struct {
 	Log            *slog.Logger
 	TemplateFS     fs.FS
-	SessionStore   *CookieStore
+	SessionStore   *scs.SessionManager
 	ShelterCreator interface {
 		CreateShelter(ctx context.Context, userID string, data NewShelter) (*Shelter, error)
 	}
@@ -201,9 +206,10 @@ type DoShelterRegistrationHandler struct {
 }
 
 func (d *DoShelterRegistrationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	loginSession, _ := GetLoginSession(d.SessionStore, w, r)
+	loginSession, _ := GetSessionUser(d.SessionStore, r.Context())
 	if loginSession == nil {
-		d.SessionStore.SetFlash(w, "Unauthorized, Please signup first.", FlashLevelError)
+		PutSessionFlash(d.SessionStore, r.Context(),
+			"Unauthorized, Please signup first.", FlashLevelError)
 		http.Redirect(w, r, d.UnauthorizedRedirectURL, http.StatusSeeOther)
 		return
 	}
@@ -246,7 +252,8 @@ func (d *DoShelterRegistrationHandler) ServeHTTP(w http.ResponseWriter, r *http.
 	}
 
 	d.Log.Debug("New shelter was registered.", "shelter_id", shelter.ID)
-	d.SessionStore.SetFlash(w, "Successfully created a new shelter.", FlashLevelSuccess)
+	PutSessionFlash(d.SessionStore, r.Context(),
+		"Successfully created a new shelter.", FlashLevelSuccess)
 	redirectURL := strings.ReplaceAll(d.SuccessRedirectURL, "{shelter_id}", shelter.ID)
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
@@ -270,7 +277,7 @@ func (d *DoShelterRegistrationHandler) RenderTemplate(w http.ResponseWriter, dat
 }
 
 type ShelterByIDTemplateData struct {
-	LoginSession *LoginSession
+	LoginSession *SessionUser
 	Flash        *Flash
 	Role         ShelterRole
 	Shelter      *Shelter
@@ -278,7 +285,7 @@ type ShelterByIDTemplateData struct {
 
 type ShelterByIDHandler struct {
 	TemplateFS      fs.FS
-	SessionStore    *CookieStore
+	SessionManager  *scs.SessionManager
 	Log             *slog.Logger
 	NotFoundHandler http.Handler
 	ShelterGetter   interface {
@@ -291,8 +298,8 @@ type ShelterByIDHandler struct {
 
 func (s *ShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	shelterID := r.PathValue("id")
-	flash, _ := s.SessionStore.Flash(w, r)
-	loginSession, _ := GetLoginSession(s.SessionStore, w, r)
+	flash, _ := PopSessionFlash(s.SessionManager, r.Context())
+	loginSession, _ := GetSessionUser(s.SessionManager, r.Context())
 
 	shelter, err := s.ShelterGetter.GetShelterByID(r.Context(), shelterID)
 	if err != nil {

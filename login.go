@@ -10,21 +10,18 @@ import (
 	"net/mail"
 	"time"
 
+	"github.com/alexedwards/scs/v2"
 	"golang.org/x/crypto/bcrypt"
 )
 
-var (
-	SessionKeyLoginSession = "login_session"
-)
-
-type LoginSession struct {
+type SessionUser struct {
 	UserID      string
 	DisplayName string
 	AvatarURL   *string
 }
 
 type LoginTemplateData struct {
-	LoginSession *LoginSession
+	LoginSession *SessionUser
 	Flash        *Flash
 	CallbackURL  string
 	Values       LoginValues
@@ -44,7 +41,7 @@ type LoginErrors struct {
 type LoginHandler struct {
 	Log                *slog.Logger
 	TemplateFS         fs.FS
-	SessionStore       *CookieStore
+	SessionManager     *scs.SessionManager
 	SuccessRedirectURL string
 
 	loginTemplateCache *template.Template
@@ -52,11 +49,12 @@ type LoginHandler struct {
 
 func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	callbackURL := r.FormValue("callback")
-	flash, _ := l.SessionStore.Flash(w, r)
-	loginSession, _ := GetLoginSession(l.SessionStore, w, r)
+	flash, _ := PopSessionFlash(l.SessionManager, r.Context())
+	loginSession, _ := GetSessionUser(l.SessionManager, r.Context())
 	if loginSession != nil {
 		l.Log.Debug("User is already logged in.", "user_id", loginSession.UserID)
-		l.SessionStore.SetFlash(w, "You are already logged in.", FlashLevelSuccess)
+		PutSessionFlash(l.SessionManager, r.Context(),
+			"You are already logged in.", FlashLevelError)
 		http.Redirect(w, r, l.SuccessRedirectURL, http.StatusSeeOther)
 		return
 	}
@@ -86,7 +84,7 @@ type LocalAccountGetter interface {
 type DoLoginHandler struct {
 	Log                *slog.Logger
 	TemplateFS         fs.FS
-	SessionStore       *CookieStore
+	SessionManager     *scs.SessionManager
 	LocalAccountGetter LocalAccountGetter
 	LoginSessionMaxAge time.Duration
 	SuccessRedirectURL string
@@ -147,27 +145,14 @@ func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loginSession := &LoginSession{
+	PutSessionUser(d.SessionManager, r.Context(), &SessionUser{
 		UserID:      user.ID,
 		AvatarURL:   user.AvatarURL,
 		DisplayName: user.DisplayName,
-	}
-	err = d.SessionStore.Encode(w, SessionKeyLoginSession, loginSession, d.LoginSessionMaxAge)
-	if err != nil {
-		d.Log.Error("Unable to save login session.", "reason", err.Error())
-		d.ExecuteTemplate(w, r, LoginTemplateData{
-			Flash: &Flash{
-				Message: "Something went wrong. Please try again later.",
-				Level:   FlashLevelError,
-			},
-			Values: loginValues,
-		})
-		return
-	}
-
+	})
 	callbackURL := r.FormValue("callback")
 	d.Log.Debug("Successfully logged in.", "user_id", user.ID)
-	d.SessionStore.SetFlash(w, "Successfully logged in.", FlashLevelSuccess)
+	PutSessionFlash(d.SessionManager, r.Context(), "Successfully logged in.", FlashLevelSuccess)
 	if callbackURL != "" {
 		http.Redirect(w, r, callbackURL, http.StatusSeeOther)
 		return
@@ -206,21 +191,4 @@ func (d *DoLoginHandler) ExecuteTemplate(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		panic("unable to execute login template: " + err.Error())
 	}
-}
-
-func GetLoginSession(ss *CookieStore, w http.ResponseWriter, r *http.Request) (*LoginSession, error) {
-	data := &LoginSession{}
-	err := ss.Decode(w, r, SessionKeyLoginSession, &data)
-	if err != nil {
-		return nil, err
-	}
-
-	return data, nil
-}
-
-func RemoveLoginSession(ss *CookieStore, w http.ResponseWriter, r *http.Request) (*LoginSession, error) {
-	data, err := GetLoginSession(ss, w, r)
-	ss.Remove(w, SessionKeyLoginSession)
-
-	return data, err
 }

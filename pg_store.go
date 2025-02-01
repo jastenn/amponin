@@ -125,6 +125,38 @@ func (p *PGStore) GetUserByID(ctx context.Context, userID string) (*User, error)
 	return user, nil
 }
 
+func (p *PGStore) UpdateUserInfo(ctx context.Context, userID string, data UserInfoUpdate) (*User, error) {
+	row := p.db.QueryRowContext(
+		ctx,
+		`UPDATE users
+			SET display_name = COALESCE($2, display_name),
+			email = COALESCE($3, email),
+			avatar_url = COALESCE($4, avatar_url),
+			updated_at = now()
+		 WHERE user_id = $1
+		 RETURNING 
+			user_id, display_name, email, avatar_url,
+			created_at, updated_at`,
+		userID,
+		data.DisplayName, data.Email, data.Avatar,
+	)
+	
+	user := &User{}
+	err := row.Scan(
+		&user.ID, &user.DisplayName, &user.Email, &user.AvatarURL,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoUser
+		}
+
+		return nil, fmt.Errorf("unable to update user: %w", err)
+	}
+
+	return user, nil
+}
+
 func (p *PGStore) CreateShelter(ctx context.Context, userID string, data NewShelter) (*Shelter, error) {
 	tx, err := p.db.Begin()
 	if err != nil {

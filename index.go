@@ -4,24 +4,27 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+
+	"github.com/alexedwards/scs/v2"
 )
 
 type IndexTemplateData struct {
-	LoginSession *LoginSession
+	LoginSession *SessionUser
 	Flash        *Flash
 }
 
 type IndexHandler struct {
 	TemplateFS      fs.FS
-	SessionStore    *CookieStore
+	SessionManager  *scs.SessionManager
 	NotFoundHandler http.Handler
 
 	indexTemplateCache *template.Template
 }
 
 func (i *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	flash, _ := i.SessionStore.Flash(w, r)
-	loginSession, _ := GetLoginSession(i.SessionStore, w, r)
+	sessionUser, _ := GetSessionUser(i.SessionManager, r.Context())
+	flash, _ := i.SessionManager.Pop(r.Context(), SessionKeyFlash).(*Flash)
+
 	if r.URL.Path != "" && r.URL.Path != "/" {
 		i.NotFoundHandler.ServeHTTP(w, r)
 		return
@@ -35,7 +38,7 @@ func (i *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	err := ExecuteTemplate(i.indexTemplateCache, w, "base.html", IndexTemplateData{
-		LoginSession: loginSession,
+		LoginSession: sessionUser,
 		Flash:        flash,
 	})
 	if err != nil {

@@ -30,11 +30,15 @@
 
 .account-settings__item-content-value {
 	margin: 0;
+	font-weight: 600;
 }
 
 .account-settings__item-content-value--avatar {
 	width: 4rem;
+	height: 4rem;
 	border-radius: 9999px;
+	object-fit: cover;
+	object-position: center;
 }
 
 .account-settings__item-update-link {

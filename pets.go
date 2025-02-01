@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	nanoid "github.com/matoous/go-nanoid/v2"
+	"github.com/alexedwards/scs/v2"
 )
 
 var (
@@ -51,7 +51,7 @@ const (
 )
 
 type PostPetTemplateData struct {
-	LoginSession *LoginSession
+	LoginSession *SessionUser
 	Flash        *Flash
 	ShelterID    string
 	Values       PetPostValues
@@ -171,7 +171,7 @@ type PetPostErrors struct {
 type PostPetHandler struct {
 	Log               *slog.Logger
 	TemplateFS        fs.FS
-	SessionStore      *CookieStore
+	SessionManager    *scs.SessionManager
 	ShelterRoleGetter ShelterRoleGetter
 	LoginRedirectURL  string
 
@@ -184,16 +184,19 @@ func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		panic("shelter id is missing")
 	}
 
-	loginSession, _ := GetLoginSession(p.SessionStore, w, r)
-	if loginSession == nil {
+	sessionUser, _ := GetSessionUser(p.SessionManager, r.Context())
+	if sessionUser == nil {
 		p.Log.Debug("Unauthorized, user is not logged in.")
-		p.SessionStore.SetFlash(w, "Please login first.", FlashLevelError)
+		PutSessionFlash(
+			p.SessionManager, r.Context(),
+			"Please login first.", FlashLevelError,
+		)
 		redirectURL := strings.ReplaceAll(p.LoginRedirectURL, "{shelter_id}", shelterID)
 		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 		return
 	}
 
-	_, err := p.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelterID, loginSession.UserID)
+	_, err := p.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelterID, sessionUser.UserID)
 	if err != nil {
 		if errors.Is(err, ErrNoShelterRole) {
 			p.Log.Debug("User doesn't have role on shelter provided.")
@@ -214,7 +217,7 @@ func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	err = ExecuteTemplate(p.postPetTemplateCache, w, "base.html", PostPetTemplateData{
-		LoginSession: loginSession,
+		LoginSession: sessionUser,
 		ShelterID:    shelterID,
 	})
 	if err != nil {
@@ -244,7 +247,7 @@ type PetRegistry interface {
 type DoPetPostHandler struct {
 	TemplateFS         fs.FS
 	FileStore          FileStore
-	SessionStore       *CookieStore
+	SessionManager     *scs.SessionManager
 	Log                *slog.Logger
 	PetRegistry        PetRegistry
 	ShelterRoleGetter  ShelterRoleGetter
@@ -257,10 +260,13 @@ type DoPetPostHandler struct {
 func (d *DoPetPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	shelterID := r.PathValue("shelter_id")
 
-	loginSession, _ := GetLoginSession(d.SessionStore, w, r)
+	loginSession, _ := GetSessionUser(d.SessionManager, r.Context())
 	if loginSession == nil {
 		d.Log.Debug("Unauthorized, user is not logged in.")
-		d.SessionStore.SetFlash(w, "Please login first.", FlashLevelError)
+		PutSessionFlash(
+			d.SessionManager, r.Context(),
+			"Please login first.", FlashLevelError,
+		)
 		redirectURL := strings.ReplaceAll(d.LoginRedirectURL, "{shelter_id}", shelterID)
 		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 		return
@@ -328,8 +334,7 @@ func (d *DoPetPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		defer file.Close()
 
-		filename := strconv.FormatInt(time.Now().UnixMicro(), 10) + nanoid.Must(9) + hfile.Filename
-		filepath := filepath.Join("shelters", shelterID, filename)
+		filepath := filepath.Join("shelters", shelterID, hfile.Filename)
 		url, err := d.FileStore.Save(filepath, file)
 		if err != nil {
 			d.Log.Debug("Unable to save one of the image", "reason", err.Error())
@@ -369,7 +374,10 @@ func (d *DoPetPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	d.Log.Debug("New pet was registered.", "shelter_id", shelterID, "pet_id", pet.ID)
-	d.SessionStore.SetFlash(w, "New pet was registered.", FlashLevelSuccess)
+	PutSessionFlash(
+		d.SessionManager, r.Context(),
+		"New pet was registered.", FlashLevelSuccess,
+	)
 	redirectURL := strings.ReplaceAll(d.SuccessRedirectURL, "{pet_id}", pet.ID)
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
@@ -394,7 +402,7 @@ type PetSearchQuery struct {
 }
 
 type PetsTemplateData struct {
-	LoginSession *LoginSession
+	LoginSession *SessionUser
 	Flash        *Flash
 	FormError    string
 	Query        PetSearchQuery
@@ -415,7 +423,7 @@ type FindPetByLocationFilter struct {
 type PetsHandler struct {
 	Log                 *slog.Logger
 	TemplateFS          fs.FS
-	SessionStore        *CookieStore
+	SessionManager      *scs.SessionManager
 	PetFinderByLocation interface {
 		FindPetByLocation(context.Context, *Coordinates, FindPetByLocationFilter) ([]FindPetByLocationResult, error)
 	}
@@ -424,8 +432,8 @@ type PetsHandler struct {
 }
 
 func (i *PetsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	flash, _ := i.SessionStore.Flash(w, r)
-	loginSession, _ := GetLoginSession(i.SessionStore, w, r)
+	flash, _ := PopSessionFlash(i.SessionManager, r.Context())
+	loginSession, _ := GetSessionUser(i.SessionManager, r.Context())
 
 	query := PetSearchQuery{
 		Location: r.FormValue("location"),
@@ -507,7 +515,7 @@ func (i *PetsHandler) RenderTemplate(w http.ResponseWriter, data PetsTemplateDat
 }
 
 type PetByIDTemplateData struct {
-	LoginSession *LoginSession
+	LoginSession *SessionUser
 	Flash        *Flash
 	Pet          *Pet
 	Shelter      *Shelter
@@ -516,7 +524,7 @@ type PetByIDTemplateData struct {
 type PetByIDHandler struct {
 	Log             *slog.Logger
 	TemplateFS      fs.FS
-	SessionStore    *CookieStore
+	SessionManager  *scs.SessionManager
 	NotFoundHandler http.Handler
 	PetGetter       interface {
 		GetPetByID(ctx context.Context, petID string) (*Pet, error)
@@ -529,8 +537,9 @@ type PetByIDHandler struct {
 }
 
 func (p *PetByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	loginSession, _ := GetLoginSession(p.SessionStore, w, r)
-	flash, _ := p.SessionStore.Flash(w, r)
+	loginSession, _ := p.SessionManager.Get(r.Context(), SessionKeyLoginSession).(*SessionUser)
+	flash, _ := p.SessionManager.Pop(r.Context(), SessionKeyFlash).(*Flash)
+
 	petID := r.PathValue("pet_id")
 
 	pet, err := p.PetGetter.GetPetByID(r.Context(), petID)

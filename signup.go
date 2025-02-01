@@ -10,14 +10,15 @@ import (
 	"log/slog"
 	"net/http"
 	"net/mail"
-	"time"
 
+	"github.com/alexedwards/scs/v2"
 	nanoid "github.com/matoous/go-nanoid/v2"
 	"golang.org/x/crypto/bcrypt"
 )
 
 const (
-	SessionStoreKeyUser = "session_user"
+	SessionStoreKeyUser  = "session_user"
+	SessionKeySignupData = "signup_data"
 )
 
 type UserSession struct {
@@ -26,9 +27,7 @@ type UserSession struct {
 	AvatarURL *string
 }
 
-const SessionStoreKeySignupData = "signup_data"
-
-type SessionSignupData struct {
+type SessionDataSignupValues struct {
 	DisplayName      string
 	Email            string
 	Password         string
@@ -36,7 +35,7 @@ type SessionSignupData struct {
 }
 
 type SignupTemplateData struct {
-	LoginSession *LoginSession
+	LoginSession *SessionUser
 	Flash        *Flash
 	Values       SignupValues
 	Errors       SignupErrors
@@ -59,19 +58,21 @@ type SignupErrors struct {
 type SignupHandler struct {
 	Log                 *slog.Logger
 	TemplateFS          fs.FS
-	SessionStore        *CookieStore
+	SessionManager      *scs.SessionManager
 	LoggedInRedirectURL string
 
 	signupTemplateCache *template.Template
 }
 
 func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	flash, _ := s.SessionStore.Flash(w, r)
-
-	loginSession, _ := GetLoginSession(s.SessionStore, w, r)
+	flash, _ := PopSessionFlash(s.SessionManager, r.Context())
+	loginSession, _ := GetSessionUser(s.SessionManager, r.Context())
 	if loginSession != nil {
 		s.Log.Debug("User is currently logged in.", "user_id", loginSession.UserID)
-		s.SessionStore.SetFlash(w, "Please log out first before signing up.", FlashLevelError)
+		PutSessionFlash(
+			s.SessionManager, r.Context(),
+			"Please log out first before signing up.", FlashLevelError,
+		)
 		http.Redirect(w, r, s.LoggedInRedirectURL, http.StatusSeeOther)
 		return
 	}
@@ -92,10 +93,10 @@ func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type DoSignupHandler struct {
-	Log          *slog.Logger
-	TemplateFS   fs.FS
-	SessionStore *CookieStore
-	MailSender   interface {
+	Log            *slog.Logger
+	TemplateFS     fs.FS
+	SessionManager *scs.SessionManager
+	MailSender     interface {
 		SendMail(ctx context.Context, email string, msg []byte) error
 	}
 	VerificationRedirectURL string
@@ -119,24 +120,13 @@ func (d *DoSignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionSignupData := SessionSignupData{
+	sessionSignupData := &SessionDataSignupValues{
 		DisplayName:      fieldValues.DisplayName,
 		Email:            fieldValues.Email,
 		Password:         fieldValues.Password,
 		VerificationCode: nanoid.MustGenerate("ABCDEFGHIJKLMNPQRSTUVWXYZ123456789", 6),
 	}
-	err := d.SessionStore.Encode(w, SessionStoreKeySignupData, sessionSignupData, time.Minute*5)
-	if err != nil {
-		d.Log.Error("Unable to save field values to session store.", "reason", err.Error())
-		d.ExecuteTemplate(w, http.StatusBadRequest, SignupTemplateData{
-			Flash: &Flash{
-				Level:   FlashLevelError,
-				Message: "Something went wrong. Please try again later.",
-			},
-			Values: fieldValues,
-		})
-		return
-	}
+	d.SessionManager.Put(r.Context(), SessionKeySignupData, sessionSignupData)
 
 	go func() {
 		err := d.SendCode(w, fieldValues.Email, sessionSignupData.VerificationCode)
@@ -213,8 +203,8 @@ func (d *DoSignupHandler) ExecuteTemplate(w http.ResponseWriter, status int, dat
 }
 
 type SignupCompletionTemplateData struct {
-	Flash *Flash
-	LoginSession *LoginSession
+	Flash        *Flash
+	LoginSession *SessionUser
 	Email        string
 	Code         string
 	CodeError    string
@@ -223,25 +213,20 @@ type SignupCompletionTemplateData struct {
 type SignupCompletionHandler struct {
 	Log               *slog.Logger
 	TemplateFS        fs.FS
-	SessionStore      *CookieStore
+	SessionManager    *scs.SessionManager
 	SignupRedirectURL string
 
 	signupVerificationTemplateCache *template.Template
 }
 
 func (d *SignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	sessionSignupData := &SessionSignupData{}
-	err := d.SessionStore.Decode(w, r, SessionStoreKeySignupData, &sessionSignupData)
-	if err != nil {
-		if errors.Is(err, ErrNoSessionData) {
-			d.Log.Debug("User haven't started the signup process. No signup values was found.")
-			d.SessionStore.SetFlash(w, "Please signup first.", FlashLevelError)
-			http.Redirect(w, r, d.SignupRedirectURL, http.StatusSeeOther)
-			return
-		}
-
-		d.Log.Error("Unable to decode signup values.", "reason", err.Error())
-		d.SessionStore.SetFlash(w, "Something went wrong, Please try again later.", FlashLevelError)
+	sessionSignupData, ok := d.SessionManager.Get(r.Context(), SessionKeySignupData).(*SessionDataSignupValues)
+	if !ok {
+		d.Log.Debug("User haven't started the signup process. No signup values was found.")
+		PutSessionFlash(
+			d.SessionManager, r.Context(),
+			"Please signup first.", FlashLevelError,
+		)
 		http.Redirect(w, r, d.SignupRedirectURL, http.StatusSeeOther)
 		return
 	}
@@ -256,7 +241,7 @@ func (d *SignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	data := SignupCompletionTemplateData{
 		Email: sessionSignupData.Email,
 	}
-	err = ExecuteTemplate(d.signupVerificationTemplateCache, w, "base.html", data)
+	err := ExecuteTemplate(d.signupVerificationTemplateCache, w, "base.html", data)
 	if err != nil {
 		panic("unable to execute signup template: " + err.Error())
 	}
@@ -274,7 +259,7 @@ type NewLocalAccount struct {
 type DoSignupCompletionHandler struct {
 	TemplateFS          fs.FS
 	Log                 *slog.Logger
-	SessionStore        *CookieStore
+	SessionManager      *scs.SessionManager
 	LocalAccountCreator interface {
 		CreateLocalAccount(ctx context.Context, data NewLocalAccount) (*LocalAccount, *User, error)
 	}
@@ -286,18 +271,13 @@ type DoSignupCompletionHandler struct {
 
 func (d *DoSignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	verificationCode := r.FormValue("code")
-	sessionSignupData := &SessionSignupData{}
-	err := d.SessionStore.Decode(w, r, SessionStoreKeySignupData, sessionSignupData)
-	if err != nil {
-		if errors.Is(err, ErrNoSessionData) {
-			d.Log.Debug("User haven't started the signup process. No signup values was found.")
-			d.SessionStore.SetFlash(w, "Please signup first.", FlashLevelError)
-			http.Redirect(w, r, d.SignupRedirectURL, http.StatusSeeOther)
-			return
-		}
-
-		d.Log.Error("Unable to decode signup values.", "reason", err.Error())
-		d.SessionStore.SetFlash(w, "Something went wrong, Please try again later.", FlashLevelError)
+	sessionSignupData, ok := d.SessionManager.Get(r.Context(), SessionKeySignupData).(*SessionDataSignupValues)
+	if !ok {
+		d.Log.Debug("User haven't started the signup process. No signup values was found.")
+		PutSessionFlash(
+			d.SessionManager, r.Context(),
+			"Please signup first.", FlashLevelError,
+		)
 		http.Redirect(w, r, d.SignupRedirectURL, http.StatusSeeOther)
 		return
 	}
@@ -315,7 +295,11 @@ func (d *DoSignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(sessionSignupData.Password), bcrypt.DefaultCost)
 	if err != nil {
 		d.Log.Error("Failed to generate hash from password.", "reason", err.Error())
-		d.SessionStore.SetFlash(w, "Something went wrong. Please try again later.", FlashLevelError)
+
+		PutSessionFlash(
+			d.SessionManager, r.Context(),
+			"Something went wrong. Please try again later.", FlashLevelError,
+		)
 		http.Redirect(w, r, d.SignupRedirectURL, http.StatusSeeOther)
 		return
 	}
@@ -328,20 +312,29 @@ func (d *DoSignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		if errors.Is(err, ErrEmailInUse) {
 			d.Log.Debug("Email is already in use.", "email", sessionSignupData.Email)
-			d.SessionStore.SetFlash(w, "Email is already in use.", FlashLevelError)
+			PutSessionFlash(
+				d.SessionManager, r.Context(),
+				"Email is already in use.", FlashLevelError,
+			)
 			http.Redirect(w, r, d.SignupRedirectURL, http.StatusSeeOther)
 			return
 		}
 
 		d.Log.Error("Failed to create a user local account", "reason", err.Error())
-		d.SessionStore.SetFlash(w, "Something went wrong. Please try again later.", FlashLevelError)
+		PutSessionFlash(
+			d.SessionManager, r.Context(),
+			"Something went wrong. Please try again later.", FlashLevelError,
+		)
 		http.Redirect(w, r, d.SignupRedirectURL, http.StatusSeeOther)
 		return
 	}
 
-	d.SessionStore.Remove(w, SessionStoreKeySignupData)
+	d.SessionManager.Remove(r.Context(), SessionKeySignupData)
 	d.Log.Debug("New local account was registered.", "id", user.ID)
-	d.SessionStore.SetFlash(w, "Successfully signed up.", FlashLevelSuccess)
+	PutSessionFlash(
+		d.SessionManager, r.Context(),
+		"Signup successful.", FlashLevelSuccess,
+	)
 	http.Redirect(w, r, d.SucccessRedirectURL, http.StatusSeeOther)
 }
 

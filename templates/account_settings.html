@@ -7,6 +7,16 @@
 <main>
 	<div class="card container-xs account-settings">
 		<h1 id="login-heading" class="card__heading">Account Settings</h1>
+		{{ with .Flash }}
+		<div class="card__flash
+				{{- if eq .Level `flash_error` }} card__flash--error
+				{{- else if eq .Level `flash_warn` }} card__flash--warn
+				{{- else if eq .Level `flash_success` }} card__flash--success
+				{{- end -}}
+			">
+				{{ .Message }}					
+			</div>
+		{{ end }}
 		<div class="account-settings__items">
 			<div class="account-settings__item">
 				<div class="account-settings__item-hgroup">
@@ -16,7 +26,8 @@
 					{{ end }}
 				</div>
 				{{ if eq .Focus `general` }}
-					<form target="/account-settings?update=general" method="post" class="account-settings__item-content">
+					<form action="/account-settings" method="post" class="account-settings__item-content" enctype="multipart/form-data">
+						<input type="hidden" name="update" value="general">
 						<div>
 							<label class="form-label">Avatar</label>
 							<input type="file" name="avatar">

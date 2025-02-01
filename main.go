@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"time"
 
+	scs "github.com/alexedwards/scs/v2"
 	_ "github.com/lib/pq"
 )
 
@@ -29,7 +30,6 @@ func main() {
 	shutdownTimeout := flag.Duration("shutdown-timeout", time.Second*15, "timeout to use waiting for active connections before closing")
 	certFile := flag.String("cert-file", "", "path to SSL Certificate to use for secure connection")
 	keyFile := flag.String("key-file", "", "path to SSL Key to use for secure connection")
-	secret := flag.String("secret", "", "key to be used in encrypting sensitive data")
 	smtpEmail := flag.String("smtp-email", "", "email address to be used in sending email")
 	smtpPassword := flag.String("smtp-password", "", "password for email address in smtp authentication")
 	database := flag.String("database", "", "url to database to be used in storing data")
@@ -42,9 +42,6 @@ func main() {
 	if *keyFile == "" {
 		panic("key-file flag required.")
 	}
-	if *secret == "" {
-		panic("secret flag is required.")
-	}
 	if *smtpEmail == "" {
 		panic("smtp-email flag is required.")
 	}
@@ -53,6 +50,10 @@ func main() {
 	}
 	if *database == "" {
 		panic("database flag is required.")
+	}
+
+	fileStore := &LocalFileStore{
+		BaseDir: *baseFileStoreDir,
 	}
 
 	publicFS, err := fs.Sub(embedFS, "public")
@@ -79,10 +80,12 @@ func main() {
 		panic("failed to ping database: " + err.Error())
 	}
 
-	store := &PGStore{
+	postgresStore := &PGStore{
 		db: databaseConnection,
 	}
-	cookieStore := NewCookieStore(*secret)
+
+	sessionManager := scs.New()
+
 	emailVerifier := NewGoogleMailSender(*smtpEmail, *smtpPassword)
 
 	handler := http.NewServeMux()
@@ -96,124 +99,132 @@ func main() {
 		),
 	)
 	handler.Handle("GET /", &IndexHandler{
-		SessionStore: cookieStore,
-		TemplateFS:   templatesFS,
-	})
-	handler.Handle("GET /pets", &PetsHandler{
-		Log:                 log,
-		SessionStore:        cookieStore,
-		TemplateFS:          templatesFS,
-		PetFinderByLocation: store,
+		SessionManager: sessionManager,
+		TemplateFS:     templatesFS,
 	})
 	handler.Handle("GET /signup", &SignupHandler{
 		Log:                 log,
 		TemplateFS:          templatesFS,
-		SessionStore:        cookieStore,
+		SessionManager:      sessionManager,
 		LoggedInRedirectURL: "/",
 	})
 	handler.Handle("POST /signup", &DoSignupHandler{
 		Log:                     log,
 		TemplateFS:              templatesFS,
-		SessionStore:            cookieStore,
+		SessionManager:          sessionManager,
 		MailSender:              emailVerifier,
 		VerificationRedirectURL: "/signup/completion",
 	})
 	handler.Handle("GET /signup/completion", &SignupCompletionHandler{
 		Log:               log,
 		TemplateFS:        templatesFS,
-		SessionStore:      cookieStore,
+		SessionManager:    sessionManager,
 		SignupRedirectURL: "/signup",
 	})
 	handler.Handle("POST /signup/completion", &DoSignupCompletionHandler{
 		Log:                 log,
 		TemplateFS:          templatesFS,
-		SessionStore:        cookieStore,
+		SessionManager:      sessionManager,
 		SucccessRedirectURL: "/login",
 		SignupRedirectURL:   "/signup",
-		LocalAccountCreator: store,
+		LocalAccountCreator: postgresStore,
 	})
 	handler.Handle("GET /login", &LoginHandler{
 		Log:                log,
 		TemplateFS:         templatesFS,
-		SessionStore:       cookieStore,
+		SessionManager:     sessionManager,
 		SuccessRedirectURL: "/",
 	})
 	handler.Handle("POST /login", &DoLoginHandler{
 		Log:                log,
 		TemplateFS:         templatesFS,
-		SessionStore:       cookieStore,
+		SessionManager:     sessionManager,
 		SuccessRedirectURL: "/",
 		LoginSessionMaxAge: time.Hour * 24 * 7,
-		LocalAccountGetter: store,
+		LocalAccountGetter: postgresStore,
 	})
 	handler.Handle("POST /logout", &DoLogout{
-		Log:          log,
-		SessionStore: cookieStore,
+		Log:            log,
+		SessionManager: sessionManager,
+	})
+	handler.Handle("GET /pets", &PetsHandler{
+		Log:                 log,
+		SessionManager:      sessionManager,
+		TemplateFS:          templatesFS,
+		PetFinderByLocation: postgresStore,
 	})
 	handler.Handle("GET /account-settings", &AccountSettingsHandler{
 		Log:              log,
 		TemplateFS:       templatesFS,
-		SessionStore:     cookieStore,
-		UserGetterByID:   store,
+		SessionManager:   sessionManager,
+		UserGetterByID:   postgresStore,
 		LoginRedirectURL: "/login?callback=%2Faccount-settings",
+	})
+	handler.Handle("POST /account-settings", &DoAccountSettingsHandler{
+		TemplateFS:                 templatesFS,
+		Log:                        log,
+		SessionStore:               sessionManager,
+		UserGetterByID:             postgresStore,
+		FileStore:                  fileStore,
+		UnauthenticatedRedirectURL: "/login?callback=%2Faccount-settings",
+		SuccessRedirectURL:         "/account-settings",
+		UserInfoUpdater:            postgresStore,
 	})
 	handler.Handle("GET /shelter", &ShelterHandler{
 		Log:                log,
 		TemplateFS:         templatesFS,
-		SessionStore:       cookieStore,
-		UserSheltersFinder: store,
+		SessionManager:     sessionManager,
+		UserSheltersFinder: postgresStore,
 	})
 	handler.Handle("GET /shelter/registration", &ShelterRegistrationHandler{
 		TemplateFS:              templatesFS,
-		SessionStore:            cookieStore,
+		SessionStore:            sessionManager,
 		UnauthorizedRedirectURL: "/login?callback=%2Fshelter%2Fregistration",
 	})
 	handler.Handle("POST /shelter/registration", &DoShelterRegistrationHandler{
 		TemplateFS:              templatesFS,
 		Log:                     log,
-		SessionStore:            cookieStore,
+		SessionStore:            sessionManager,
 		UnauthorizedRedirectURL: "/login?callback=%2Fshelter%2Fregistration",
-		ShelterCreator:          store,
+		ShelterCreator:          postgresStore,
 		SuccessRedirectURL:      "/shelter/{shelter_id}",
 	})
 	handler.Handle("GET /shelter/{id}", &ShelterByIDHandler{
 		Log:               log,
 		TemplateFS:        templatesFS,
-		SessionStore:      cookieStore,
+		SessionManager:    sessionManager,
 		NotFoundHandler:   http.NotFoundHandler(),
-		ShelterGetter:     store,
-		ShelterRoleGetter: store,
+		ShelterGetter:     postgresStore,
+		ShelterRoleGetter: postgresStore,
 	})
 	handler.Handle("GET /shelter/{id}/post-pet", &PostPetHandler{
 		TemplateFS:        templatesFS,
 		Log:               log,
-		SessionStore:      cookieStore,
-		ShelterRoleGetter: store,
+		SessionManager:    sessionManager,
+		ShelterRoleGetter: postgresStore,
 		LoginRedirectURL:  "/login?callback=%2Fshelter%2F{shelter_id}%2Fpost-pet",
 	})
 	handler.Handle("POST /shelter/{shelter_id}/post-pet", &DoPetPostHandler{
-		TemplateFS:        templatesFS,
-		Log:               log,
-		SessionStore:      cookieStore,
-		ShelterRoleGetter: store,
-		FileStore: &LocalFileStore{
-			BaseDir: *baseFileStoreDir,
-		},
-		PetRegistry:        store,
+		TemplateFS:         templatesFS,
+		Log:                log,
+		SessionManager:     sessionManager,
+		ShelterRoleGetter:  postgresStore,
+		FileStore:          fileStore,
+		PetRegistry:        postgresStore,
 		SuccessRedirectURL: "/{pet_id}",
 	})
 	handler.Handle("GET /{pet_id}", &PetByIDHandler{
 		Log:             log,
-		SessionStore:    cookieStore,
+		SessionManager:  sessionManager,
 		NotFoundHandler: http.NotFoundHandler(),
 		TemplateFS:      templatesFS,
-		PetGetter:       store,
-		ShelterGetter:   store,
+		PetGetter:       postgresStore,
+		ShelterGetter:   postgresStore,
 	})
 
 	server := http.Server{
 		Addr:         *address,
-		Handler:      handler,
+		Handler:      sessionManager.LoadAndSave(handler),
 		ReadTimeout:  *readTimeout,
 		WriteTimeout: *writeTimeout,
 		IdleTimeout:  *idleTimeout,
