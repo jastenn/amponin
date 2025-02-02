@@ -27,7 +27,7 @@
 				</div>
 				{{ if eq .Focus `general` }}
 					<form action="/account-settings" method="post" class="account-settings__item-content" enctype="multipart/form-data">
-						<input type="hidden" name="update" value="general">
+						<input type="hidden" name="action" value="general-update">
 						<div>
 							<label class="form-label">Avatar</label>
 							<input type="file" name="avatar">
@@ -95,7 +95,8 @@
 					{{ end }}
 				</div>
 				{{ if eq .Focus `password` }}
-					<form target="/account-settings?update=password" method="post" class="account-settings__item-content">
+					<form target="/account-settings" method="post" class="account-settings__item-content">
+						<input type="hidden" name="action" value="password-update">
 						<div>
 							<label for="current-password" class="form-label">Current Password</label>	
 							<input id="current-password" type="password" name="current-password" value="{{ .PasswordUpdateValues.CurrentPassword }}"

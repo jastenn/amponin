@@ -164,11 +164,11 @@ func main() {
 		TemplateFS:                 templatesFS,
 		Log:                        log,
 		SessionStore:               sessionManager,
-		UserGetterByID:             postgresStore,
+		UserStore:                  postgresStore,
 		FileStore:                  fileStore,
 		UnauthenticatedRedirectURL: "/login?callback=%2Faccount-settings",
 		SuccessRedirectURL:         "/account-settings",
-		UserInfoUpdater:            postgresStore,
+		LocalAccountStore:          postgresStore,
 	})
 	handler.Handle("GET /shelter", &ShelterHandler{
 		Log:                log,

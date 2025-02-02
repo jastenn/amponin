@@ -67,6 +67,29 @@ func (p *PGStore) CreateLocalAccount(ctx context.Context, data NewLocalAccount) 
 	return localAccount, user, nil
 }
 
+func (p *PGStore) UpdateLocalAccountPassword(ctx context.Context, userID string, passwordHash []byte) (*LocalAccount, error) {
+	row := p.db.QueryRowContext(ctx,
+		`UPDATE local_accounts
+			SET password_hash = $2,
+			updated_at = now()
+		 WHERE user_id = $1
+		 RETURNING user_id, password_hash, created_at, updated_at`,
+		userID, passwordHash,
+	)
+
+	localAccount := &LocalAccount{}
+	err := row.Scan(&localAccount.UserID, &localAccount.PasswordHash, &localAccount.CreatedAt, &localAccount.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoLocalAccount
+		}
+
+		return nil, fmt.Errorf("unable to update local_accounts password: %w", err)
+	}
+
+	return localAccount, nil
+}
+
 func (p *PGStore) GetLocalAccount(ctx context.Context, email string) (*LocalAccount, *User, error) {
 	user := &User{}
 	err := p.db.QueryRowContext(ctx,
@@ -140,7 +163,7 @@ func (p *PGStore) UpdateUserInfo(ctx context.Context, userID string, data UserIn
 		userID,
 		data.DisplayName, data.Email, data.Avatar,
 	)
-	
+
 	user := &User{}
 	err := row.Scan(
 		&user.ID, &user.DisplayName, &user.Email, &user.AvatarURL,
