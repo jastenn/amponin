@@ -419,3 +419,28 @@ func (p *PGStore) FindPetByLocation(ctx context.Context, location *Coordinates, 
 
 	return results, nil
 }
+
+func (p *PGStore) CreateEmailChangeRequest(ctx context.Context, data NewEmailChangeRequest) (*EmailChangeRequest, error) {
+	row := p.db.QueryRowContext(ctx,
+		`INSERT INTO email_change_request (user_id, new_email, expires_at)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (user_id)
+		 DO UPDATE 
+			SET code = nanoid(12),
+			new_email = $2,
+			expires_at = $3,
+			created_at = now()
+		 RETURNING 
+			user_id, code, new_email, expires_at, created_at`,
+		data.UserID, data.NewEmail, data.ExpiresAt,
+	)
+
+	result := &EmailChangeRequest{}
+	err := row.Scan(&result.UserID, &result.Code, &result.NewEmail, &result.ExpiresAt, &result.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("unable to insert into email change request table: %w", err)
+	}
+
+	return result, nil
+
+}

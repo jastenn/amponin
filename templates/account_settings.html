@@ -69,10 +69,11 @@
 					{{ end }}
 				</div>
 				{{ if eq .Focus `email` }}
-					<form target="/account-settings?update=email" method="post" class="account-settings__item-content">
+					<form action="/account-settings" method="post" class="account-settings__item-content">
+						<input type="hidden" name="action" value="email-update">
 						<div>
-							<label for="email" class="form-label">Email</label>	
-							<input id="email" type="text" name="email" value="{{ .EmailUpdateValue }}"
+							<label for="new-email" class="form-label">Email</label>	
+							<input id="new-email" type="text" name="new-email" value="{{ .EmailUpdateValue }}"
 								class="form-control">
 							{{ with .EmailUpdateError }}
 								<small class="form-helper form-helper--error">{{ . }}</small>

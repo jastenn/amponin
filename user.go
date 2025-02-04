@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 
@@ -653,6 +654,24 @@ type UserInfoUpdate struct {
 	Email       *string
 }
 
+type EmailSender interface {
+	SendMail(ctx context.Context, email string, data []byte) error
+}
+
+type EmailChangeRequest struct {
+	Code      string
+	UserID    string
+	NewEmail  string
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+
+type NewEmailChangeRequest struct {
+	UserID    string
+	NewEmail  string
+	ExpiresAt time.Time
+}
+
 type DoAccountSettingsHandler struct {
 	Log          *slog.Logger
 	TemplateFS   fs.FS
@@ -666,8 +685,14 @@ type DoAccountSettingsHandler struct {
 		LocalAccountGetter
 		UpdateLocalAccountPassword(ctx context.Context, userID string, passwordHash []byte) (*LocalAccount, error)
 	}
+	EmailChangeRequestCreator interface {
+		CreateEmailChangeRequest(context.Context, NewEmailChangeRequest) (*EmailChangeRequest, error)
+	}
 	UnauthenticatedRedirectURL string
 	SuccessRedirectURL         string
+	EmailChangeRequestURL      *url.URL
+	EmailChangeRequestMaxAge   time.Duration
+	EmailSender                EmailSender
 
 	accountSettingsTemplateCache *template.Template
 }
@@ -702,6 +727,9 @@ func (d *DoAccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	switch r.FormValue("action") {
 	case "general-update":
 		d.HandleGeneralUpdate(w, r, loginSession, user)
+		return
+	case "email-update":
+		d.HandleEmailUpdate(w, r, loginSession, user)
 		return
 	case "password-update":
 		d.HandlePasswordUpdate(w, r, loginSession, user)
@@ -827,6 +855,110 @@ func (d *DoAccountSettingsHandler) HandleGeneralUpdate(w http.ResponseWriter, r 
 	PutSessionFlash(d.SessionStore, r.Context(),
 		"General Infomation was successfully updated.", FlashLevelSuccess)
 	http.Redirect(w, r, d.SuccessRedirectURL, http.StatusSeeOther)
+}
+
+type EmailChangeTemplateData struct {
+	Recipient string
+	Link      string
+}
+
+func (d *DoAccountSettingsHandler) HandleEmailUpdate(w http.ResponseWriter, r *http.Request, sessionUser *SessionUser, user *User) {
+	newEmail := r.FormValue("new-email")
+
+	var emailError string
+	if l := len(newEmail); l == 0 {
+		emailError = "Please fill out this field."
+	} else if _, err := mail.ParseAddress(newEmail); err != nil || l > 255 {
+		emailError = "Value is invalid email."
+	} else if newEmail == user.Email {
+		emailError = "Use a different email address."
+	}
+
+	if emailError != "" {
+		d.Log.Debug("Account email update failed validation.", "error", emailError)
+		d.RenderPage(w, AccountSettingsTemplateData{
+			LoginSession:     sessionUser,
+			Focus:            "email",
+			User:             user,
+			EmailUpdateValue: newEmail,
+			EmailUpdateError: emailError,
+		})
+		return
+	}
+
+	emailChangeRequest, err := d.EmailChangeRequestCreator.CreateEmailChangeRequest(
+		r.Context(),
+		NewEmailChangeRequest{
+			UserID:    user.ID,
+			NewEmail:  newEmail,
+			ExpiresAt: time.Now().Add(d.EmailChangeRequestMaxAge),
+		},
+	)
+	if err != nil {
+		d.Log.Error("Unable to create email change request.", "reason", err.Error())
+		d.RenderPage(w, AccountSettingsTemplateData{
+			Flash: &Flash{
+				Level:   FlashLevelError,
+				Message: "Something went wrong. Please try again later.",
+			},
+			LoginSession:     sessionUser,
+			User:             user,
+			Focus:            "email",
+			EmailUpdateValue: newEmail,
+		})
+		return
+	}
+
+	link := &url.URL{}
+	*link = *d.EmailChangeRequestURL
+	link.RawQuery = "request-code=" + url.QueryEscape(emailChangeRequest.Code)
+
+	var msg bytes.Buffer
+	msg.WriteString("Subject: Change Email Request\n")
+	msg.WriteString("MIME-Version: 1.0\n")
+	msg.WriteString("Content-Type: text/html; charset=UTF-8\n")
+	msg.WriteString("\n")
+	err = template.Must(template.ParseFS(d.TemplateFS, "mail/change_email.html")).
+		Execute(&msg, EmailChangeTemplateData{
+			Recipient: user.DisplayName,
+			Link:      link.String(),
+		})
+	if err != nil {
+		d.Log.Error("Unable to execute change email template")
+		d.RenderPage(w, AccountSettingsTemplateData{
+			Flash: &Flash{
+				Level:   FlashLevelError,
+				Message: "Something went wrong. Please try again later.",
+			},
+			LoginSession:     sessionUser,
+			User:             user,
+			Focus:            "email",
+			EmailUpdateValue: newEmail,
+		})
+		return
+	}
+
+	go func() {
+		err := d.EmailSender.SendMail(r.Context(), user.Email, msg.Bytes())
+		if err != nil {
+			d.Log.Error("Unable send email.", "reason", err.Error())
+		}
+	}()
+
+	d.Log.Debug(
+		"Email change request was successful.",
+		"user_id", emailChangeRequest.UserID,
+		"new_email", emailChangeRequest.NewEmail,
+		"code", emailChangeRequest.Code,
+	)
+	d.RenderPage(w, AccountSettingsTemplateData{
+		Flash: &Flash{
+			Level:   FlashLevelSuccess,
+			Message: "A link has been sent through your current email.",
+		},
+		LoginSession: sessionUser,
+		User:         user,
+	})
 }
 
 func (d *DoAccountSettingsHandler) HandlePasswordUpdate(w http.ResponseWriter, r *http.Request, userSession *SessionUser, user *User) {

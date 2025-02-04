@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"time"
@@ -35,6 +36,7 @@ func main() {
 	smtpPassword := flag.String("smtp-password", "", "password for email address in smtp authentication")
 	database := flag.String("database", "", "url to database to be used in storing data")
 	baseFileStoreDir := flag.String("base-file-store-dir", "file-store", "Base directory to be used as storage for local store")
+	host := flag.String("host", "", "host or hostname:port where this application is hosted on")
 	flag.Parse()
 
 	if *certFile == "" {
@@ -51,6 +53,9 @@ func main() {
 	}
 	if *database == "" {
 		panic("database flag is required.")
+	}
+	if *host == "" {
+		panic("host flag is required.")
 	}
 
 	fileStore := &LocalFileStore{
@@ -88,7 +93,7 @@ func main() {
 	sessionManager := scs.New()
 	sessionManager.Store = postgresstore.New(databaseConnection)
 
-	emailVerifier := NewGoogleMailSender(*smtpEmail, *smtpPassword)
+	googleEmailSender := NewGoogleMailSender(*smtpEmail, *smtpPassword)
 
 	handler := http.NewServeMux()
 	handler.Handle("GET /public/{filename...}",
@@ -114,7 +119,7 @@ func main() {
 		Log:                     log.With("path", "POST /signup"),
 		TemplateFS:              templatesFS,
 		SessionManager:          sessionManager,
-		MailSender:              emailVerifier,
+		MailSender:              googleEmailSender,
 		VerificationRedirectURL: "/signup/completion",
 	})
 	handler.Handle("GET /signup/completion", &SignupCompletionHandler{
@@ -169,8 +174,16 @@ func main() {
 		UserStore:                  postgresDataStore,
 		FileStore:                  fileStore,
 		UnauthenticatedRedirectURL: "/login?callback=%2Faccount-settings",
-		SuccessRedirectURL:         "/account-settings",
-		LocalAccountStore:          postgresDataStore,
+		EmailSender:                googleEmailSender,
+		EmailChangeRequestCreator:  postgresDataStore,
+		EmailChangeRequestURL: &url.URL{
+			Scheme: "https",
+			Host:   *host,
+			Path:   "/account-settings/change-email",
+		},
+		EmailChangeRequestMaxAge: time.Minute * 5,
+		SuccessRedirectURL:       "/account-settings",
+		LocalAccountStore:        postgresDataStore,
 	})
 	handler.Handle("GET /shelter", &ShelterHandler{
 		Log:                log.With("path", "GET /shelter"),

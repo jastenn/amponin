@@ -19,8 +19,6 @@
  * under the License.
  */
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
 -- The `nanoid()` function generates a compact, URL-friendly unique identifier.
 -- Based on the given size and alphabet, it creates a randomized string that's ideal for
 -- use-cases requiring small, unpredictable IDs (e.g., URL shorteners, generated file names, etc.).
@@ -31,12 +29,10 @@ CREATE OR REPLACE FUNCTION nanoid(
     alphabet text DEFAULT '_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', -- The symbols used in the NanoId String. Must contain between 1 and 255 symbols.
     additionalBytesFactor float DEFAULT 1.6 -- The additional bytes factor used for calculating the step size. Must be equal or greater then 1.
 )
-    RETURNS text -- A randomly generated NanoId String
+    RETURNS text
     LANGUAGE plpgsql
     VOLATILE
     PARALLEL SAFE
-    -- Uncomment the following line if you have superuser privileges
-    -- LEAKPROOF
 AS
 $$
 DECLARE
