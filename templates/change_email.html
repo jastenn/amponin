@@ -1,0 +1,35 @@
+{{ define "head" }}
+	<title>Signup - Amponin</title>
+{{ end }}
+
+{{ define "content" }}
+<main>
+	<div class="card container-xs">
+		<h1 id="account-email-change-heading" class="card__heading mx-auto">Change Account Email</h1>
+		<form action="/account/change-email" method="post" class="gap" aria-labelledby="account-email-change-heading">
+			<input type="hidden" name="request-code" value="{{ .RequestCode }}">
+			<div>
+				<label for="new-email" class="form-label">New Email</label>	
+				<input id="new-email" type="text" name="new-email"
+					value="{{ .Form.NewEmail }}"
+					class="form-control"
+					aria-describedby="new-email-error">
+				{{ with index .Form.FieldErrors `new-email` }}
+					<small id="new-email-error" class="form-helper form-helper--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<div>
+				<label for="password" class="form-label">Password</label>	
+				<input id="password" type="password" name="password"
+					value="{{ .Form.Password }}"
+					class="form-control"
+					aria-describedby="password-error">
+				{{ with index .Form.FieldErrors `password` }}
+					<small id="password-error" class="form-helper form-helper--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<button type="submit" class="button w-full">Continue</button>
+		</form>
+	</div>
+</main>
+{{ end }}

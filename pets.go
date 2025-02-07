@@ -501,7 +501,7 @@ func (i *PetsHandler) RenderTemplate(w http.ResponseWriter, data PetsTemplateDat
 		var err error
 		i.petsTemplateCache, err = template.New("pets.html").
 			Funcs(template.FuncMap{
-				"fmt_distance": FmtDistance,
+				"fmt_distance": fmtDistance,
 			}).
 			ParseFS(i.TemplateFS, "base.html", "pets.html")
 		if err != nil {
@@ -560,7 +560,7 @@ func (p *PetByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if p.petByIDTemplateCache == nil {
 		p.petByIDTemplateCache, err = template.New("pet_by_id").Funcs(template.FuncMap{
-			"calc_age": CalculateAge,
+			"calc_age": calculateAge,
 		}).ParseFS(p.TemplateFS, "base.html", "pet_by_id.html")
 		if err != nil {
 			panic("unable to parse pet_by_id.html: " + err.Error())
@@ -609,36 +609,4 @@ func ParseCoordinates(s string) (*Coordinates, error) {
 		Latitude:  lat,
 		Longitude: lng,
 	}, nil
-}
-
-const year = time.Hour * 24 * 365
-const month = time.Hour * 24 * 30
-
-func CalculateAge(t time.Time) string {
-	var results []string
-	age := time.Now().Sub(t)
-
-	ageInYears := age / year
-	if ageInYears == 1 {
-		results = append(results, fmt.Sprintf("%d year", ageInYears))
-	} else if ageInYears > 1 {
-		results = append(results, fmt.Sprintf("%d years", ageInYears))
-	}
-	age = age % year
-
-	ageInMonth := age / month
-	if ageInMonth == 1 {
-		results = append(results, fmt.Sprintf("%d month", ageInMonth))
-	} else if ageInMonth > 1 {
-		results = append(results, fmt.Sprintf("%d months", ageInMonth))
-	}
-
-	return strings.Join(results, " and ") + " old"
-
-}
-
-func FmtDistance(meters int) string {
-	kilometer := float64(meters) / 1000
-
-	return fmt.Sprintf("%.2f KM", kilometer)
 }

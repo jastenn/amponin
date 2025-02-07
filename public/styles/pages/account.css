@@ -1,39 +1,39 @@
-.account-settings {
+.account {
 	max-width: 30rem;
 }
 
-.account-settings__items {
+.account__items {
 	display: grid;
 	gap: 1rem;
 }
 
-.account-settings__item-hgroup {
+.account__item-hgroup {
 	display: flex;
 	align-items: baseline;
 	justify-content: space-between;
 	margin-bottom: .25rem;
 }
 
-.account-settings__item-heading {
+.account__item-heading {
 	font-size: 1rem;
 }
 
-.account-settings__item-content {
+.account__item-content {
 	display: grid;
 	gap: .75rem;
 	margin-left: 2rem;
 }
 
-.account-settings__item-content-label {
+.account__item-content-label {
 	margin: 0;
 }
 
-.account-settings__item-content-value {
+.account__item-content-value {
 	margin: 0;
 	font-weight: 600;
 }
 
-.account-settings__item-content-value--avatar {
+.account__item-content-value--avatar {
 	width: 4rem;
 	height: 4rem;
 	border-radius: 9999px;
@@ -41,21 +41,21 @@
 	object-position: center;
 }
 
-.account-settings__item-update-link {
+.account__item-update-link {
 	color: var(--color-base-text);
 	font-size: .875rem;
 	text-decoration: underline;
 	text-transform: uppercase;
 }
 
-.account-settings__focus-item-controls {
+.account__focus-item-controls {
 	display: flex;
 	gap: .5rem;
 	justify-content: end;
 }
 
-.account-settings__focus-item-controls > * {
-	flex-basis: 7rem;
+.account__focus-item-controls > * {
+	min-width: 7rem;
 }
 
 

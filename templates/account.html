@@ -1,11 +1,11 @@
 {{ define "head" }}
-	<title>Account Settings - Amponin</title>
-	<link rel="stylesheet" href="/public/styles/pages/account-settings.css">
+	<title>Account - Amponin</title>
+	<link rel="stylesheet" href="/public/styles/pages/account.css">
 {{ end }}
 
 {{ define "content" }}
 <main>
-	<div class="card container-xs account-settings">
+	<div class="card container-xs account">
 		<h1 id="login-heading" class="card__heading">Account Settings</h1>
 		{{ with .Flash }}
 		<div class="card__flash
@@ -17,16 +17,16 @@
 				{{ .Message }}					
 			</div>
 		{{ end }}
-		<div class="account-settings__items">
-			<div class="account-settings__item">
-				<div class="account-settings__item-hgroup">
-					<h2 class="account-settings__item-heading">General</h2>
+		<div class="account__items">
+			<div class="account__item">
+				<div class="account__item-hgroup">
+					<h2 class="account__item-heading">General</h2>
 					{{ if ne .Focus `general` }} 
-						<a class="account-settings__item-update-link" href="/account-settings?focus=general">Update</a>
+						<a class="account__item-update-link" href="/account?focus=general">Update</a>
 					{{ end }}
 				</div>
 				{{ if eq .Focus `general` }}
-					<form action="/account-settings" method="post" class="account-settings__item-content" enctype="multipart/form-data">
+					<form action="/account" method="post" class="account__item-content" enctype="multipart/form-data">
 						<input type="hidden" name="action" value="general-update">
 						<div>
 							<label class="form-label">Avatar</label>
@@ -43,60 +43,56 @@
 								<small class="form-helper form-helper--error">{{ . }}</small>
 							{{ end }}
 						</div>
-						<div class="account-settings__focus-item-controls">
-							<a href="/account-settings" class="button button--outline">Cancel</a>
+						<div class="account__focus-item-controls">
+							<a href="/account" class="button button--outline">Cancel</a>
 							<button type="submit" class="button">Apply</button>
 						</div>
 					</form>
 				{{ else }}
-					<div class="account-settings__item-content">
+					<div class="account__item-content">
 						<div>
-							<div class="form-label account-settings__item-content-label">Avatar</div>
-							<img class="account-settings__avatar account-settings__item-content-value account-settings__item-content-value--avatar" src="{{ with .User.AvatarURL -}} {{ . }} {{- else -}} /public/default-avatar-user.png {{- end }}" alt="User Menu">
+							<div class="form-label account__item-content-label">Avatar</div>
+							<img class="account__avatar account__item-content-value account__item-content-value--avatar" src="{{ with .User.AvatarURL -}} {{ . }} {{- else -}} /public/default-avatar-user.png {{- end }}" alt="User Menu">
 						</div>
 						<div>
-							<div class="form-label account-settings__item-content-label">Display Name</div>
-							<div class="account-settings__item-content-value"> {{ .User.DisplayName }} </div>
+							<div class="form-label account__item-content-label">Display Name</div>
+							<div class="account__item-content-value"> {{ .User.DisplayName }} </div>
 						</div>
 					</div>
 				{{ end }}
 			</div>	
-			<div class="account-settings__item">
-				<div class="account-settings__item-hgroup">
-					<h2 class="account-settings__item-heading">Email</h2>
+			<div class="account__item">
+				<div class="account__item-hgroup">
+					<h2 class="account__item-heading">Email</h2>
 					{{ if ne .Focus `email` }}
-						<a class="account-settings__item-update-link" href="/account-settings?focus=email">Update</a>
+						<a class="account__item-update-link" href="/account?focus=email">Update</a>
 					{{ end }}
 				</div>
 				{{ if eq .Focus `email` }}
-					<form action="/account-settings" method="post" class="account-settings__item-content">
+					<form action="/account" method="post" class="account__item-content">
 						<input type="hidden" name="action" value="email-update">
 						<div>
-							<label for="new-email" class="form-label">Email</label>	
-							<input id="new-email" type="text" name="new-email" value="{{ .EmailUpdateValue }}"
-								class="form-control">
-							{{ with .EmailUpdateError }}
-								<small class="form-helper form-helper--error">{{ . }}</small>
-							{{ end }}
+							<div class="form-label account__item-content-label">Email</div>
+							<div class="account__item-content-value"> {{ .User.Email }} </div>
 						</div>
-						<div class="account-settings__focus-item-controls">
-							<a href="/account-settings" class="button button--outline">Cancel</a>
-							<button type="submit" class="button">Apply</button>
+						<div class="account__focus-item-controls">
+							<a href="/account" class="button button--outline">Cancel</a>
+							<button type="submit" class="button">Send Link</button>
 						</div>
 					</form>
 				{{ else }}
-					<div class="account-settings__item-content">{{ .User.Email }}</div>
+					<div class="account__item-content">{{ .User.Email }}</div>
 				{{ end }}
 			</div>	
-			<div class="account-settings__item">
-				<div class="account-settings__item-hgroup">
-					<h2 class="account-settings__item-heading">Password</h2>
+			<div class="account__item">
+				<div class="account__item-hgroup">
+					<h2 class="account__item-heading">Password</h2>
 					{{ if ne .Focus `password` }}
-						<a class="account-settings__item-update-link" href="/account-settings?focus=password">Update</a>
+						<a class="account__item-update-link" href="/account?focus=password">Update</a>
 					{{ end }}
 				</div>
 				{{ if eq .Focus `password` }}
-					<form target="/account-settings" method="post" class="account-settings__item-content">
+					<form target="/account" method="post" class="account__item-content">
 						<input type="hidden" name="action" value="password-update">
 						<div>
 							<label for="current-password" class="form-label">Current Password</label>	
@@ -122,13 +118,13 @@
 								<small class="form-helper form-helper--error">{{ . }}</small>
 							{{ end }}
 						</div>
-						<div class="account-settings__focus-item-controls">
-							<a href="/account-settings" class="button button--outline">Cancel</a>
+						<div class="account__focus-item-controls">
+							<a href="/account" class="button button--outline">Cancel</a>
 							<button type="submit" class="button">Apply</button>
 						</div>
 					</form>
 				{{ else }}
-					<div class="account-settings__item-content">**********</div>
+					<div class="account__item-content">**********</div>
 				{{ end }}
 			</div>	
 		</div>

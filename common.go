@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"net/http"
 
 	"github.com/alexedwards/scs/v2"
 )
@@ -66,7 +65,7 @@ func RemoveSessionUser(sm *scs.SessionManager, ctx context.Context) *SessionUser
 	return data
 }
 
-func ExecuteTemplate(tpl *template.Template, w http.ResponseWriter, name string, data any) error {
+func ExecuteTemplate(tpl *template.Template, w io.Writer, name string, data any) error {
 	var b bytes.Buffer
 	err := tpl.ExecuteTemplate(&b, name, data)
 	if err != nil {

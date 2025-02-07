@@ -40,6 +40,10 @@ type LocalAccount struct {
 	UpdatedAt    time.Time
 }
 
+func (l *LocalAccount) ComparePassword(password string) error {
+	return bcrypt.CompareHashAndPassword(l.PasswordHash, []byte(password))
+}
+
 type SessionUser struct {
 	UserID      string
 	DisplayName string
@@ -103,17 +107,21 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 var ErrNoLocalAccount = errors.New("no local account found.")
 
+type LocalAccountGetterByEmail interface {
+	GetLocalAccountByEmail(ctx context.Context, email string) (*LocalAccount, *User, error)
+}
+
 type LocalAccountGetter interface {
-	GetLocalAccount(ctx context.Context, email string) (*LocalAccount, *User, error)
+	GetLocalAccount(ctx context.Context, userID string) (*LocalAccount, error)
 }
 
 type DoLoginHandler struct {
-	Log                *slog.Logger
-	TemplateFS         fs.FS
-	SessionManager     *scs.SessionManager
-	LocalAccountGetter LocalAccountGetter
-	LoginSessionMaxAge time.Duration
-	SuccessRedirectURL string
+	Log                       *slog.Logger
+	TemplateFS                fs.FS
+	SessionManager            *scs.SessionManager
+	LocalAccountGetterByEmail LocalAccountGetterByEmail
+	LoginSessionMaxAge        time.Duration
+	SuccessRedirectURL        string
 
 	loginTemplateCache *template.Template
 }
@@ -133,7 +141,7 @@ func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	localAccount, user, err := d.LocalAccountGetter.GetLocalAccount(r.Context(), loginValues.Email)
+	localAccount, user, err := d.LocalAccountGetterByEmail.GetLocalAccountByEmail(r.Context(), loginValues.Email)
 	if err != nil {
 		if errors.Is(err, ErrNoLocalAccount) {
 			d.Log.Debug("No local account is associated with the email provided.", "email", loginValues.Email)
@@ -191,7 +199,7 @@ const (
 	SessionKeySignupData = "signup_data"
 )
 
-type SessionDataSignupValues struct {
+type SessionSignupValues struct {
 	DisplayName      string
 	Email            string
 	Password         string
@@ -257,12 +265,10 @@ func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type DoSignupHandler struct {
-	Log            *slog.Logger
-	TemplateFS     fs.FS
-	SessionManager *scs.SessionManager
-	MailSender     interface {
-		SendMail(ctx context.Context, email string, msg []byte) error
-	}
+	Log                     *slog.Logger
+	TemplateFS              fs.FS
+	SessionManager          *scs.SessionManager
+	MailSender              MailSender
 	VerificationRedirectURL string
 
 	signupTemplateCache *template.Template
@@ -284,7 +290,7 @@ func (d *DoSignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionSignupData := &SessionDataSignupValues{
+	sessionSignupData := &SessionSignupValues{
 		DisplayName:      fieldValues.DisplayName,
 		Email:            fieldValues.Email,
 		Password:         fieldValues.Password,
@@ -384,7 +390,7 @@ type SignupCompletionHandler struct {
 }
 
 func (d *SignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	sessionSignupData, ok := d.SessionManager.Get(r.Context(), SessionKeySignupData).(*SessionDataSignupValues)
+	sessionSignupData, ok := d.SessionManager.Get(r.Context(), SessionKeySignupData).(*SessionSignupValues)
 	if !ok {
 		d.Log.Debug("User haven't started the signup process. No signup values was found.")
 		PutSessionFlash(
@@ -435,7 +441,7 @@ type DoSignupCompletionHandler struct {
 
 func (d *DoSignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	verificationCode := r.FormValue("code")
-	sessionSignupData, ok := d.SessionManager.Get(r.Context(), SessionKeySignupData).(*SessionDataSignupValues)
+	sessionSignupData, ok := d.SessionManager.Get(r.Context(), SessionKeySignupData).(*SessionSignupValues)
 	if !ok {
 		d.Log.Debug("User haven't started the signup process. No signup values was found.")
 		PutSessionFlash(
@@ -557,8 +563,6 @@ type AccountSettingsTemplateData struct {
 	Focus                string
 	GeneralUpdateValues  AccountGeneralUpdateValues
 	GeneralUpdateErrors  AccountGeneralUpdateErrors
-	EmailUpdateValue     string
-	EmailUpdateError     string
 	PasswordUpdateValues AccountPasswordUpdateValues
 	PasswordUpdateErrors AccountPasswordUpdateErrors
 }
@@ -637,15 +641,19 @@ func (a *AccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 func (a *AccountSettingsHandler) RenderPage(w http.ResponseWriter, data AccountSettingsTemplateData) {
 	if a.accountSettingsTemplateCache == nil {
 		var err error
-		a.accountSettingsTemplateCache, err = template.ParseFS(a.TemplateFS, "base.html", "account_settings.html")
+		a.accountSettingsTemplateCache, err = template.ParseFS(a.TemplateFS, "base.html", "account.html")
 		if err != nil {
-			panic("unable to parse account settings template: " + err.Error())
+			panic("unable to parse account.html: " + err.Error())
 		}
 	}
 	err := ExecuteTemplate(a.accountSettingsTemplateCache, w, "base.html", data)
 	if err != nil {
-		panic("unable to execute accoutn settings template: " + err.Error())
+		panic("unable to execute account.html: " + err.Error())
 	}
+}
+
+type UserInfoUpdater interface {
+	UpdateUserInfo(ctx context.Context, userID string, data UserInfoUpdate) (*User, error)
 }
 
 type UserInfoUpdate struct {
@@ -654,35 +662,33 @@ type UserInfoUpdate struct {
 	Email       *string
 }
 
-type EmailSender interface {
-	SendMail(ctx context.Context, email string, data []byte) error
+type EmailChangeRequest struct {
+	Code         string
+	UserID       string
+	CurrentEmail string
+	ExpiresAt    time.Time
+	CreatedAt    time.Time
 }
 
-type EmailChangeRequest struct {
-	Code      string
-	UserID    string
-	NewEmail  string
-	ExpiresAt time.Time
-	CreatedAt time.Time
-}
+var ErrNoEmailChangeRequest = errors.New("no email change request found.")
 
 type NewEmailChangeRequest struct {
-	UserID    string
-	NewEmail  string
-	ExpiresAt time.Time
+	UserID       string
+	CurrentEmail string
+	ExpiresAt    time.Time
 }
 
-type DoAccountSettingsHandler struct {
+type DoAccountHandler struct {
 	Log          *slog.Logger
 	TemplateFS   fs.FS
 	SessionStore *scs.SessionManager
 	FileStore    FileStore
 	UserStore    interface {
 		UserGetterByID
-		UpdateUserInfo(ctx context.Context, userID string, data UserInfoUpdate) (*User, error)
+		UserInfoUpdater
 	}
 	LocalAccountStore interface {
-		LocalAccountGetter
+		LocalAccountGetterByEmail
 		UpdateLocalAccountPassword(ctx context.Context, userID string, passwordHash []byte) (*LocalAccount, error)
 	}
 	EmailChangeRequestCreator interface {
@@ -692,12 +698,12 @@ type DoAccountSettingsHandler struct {
 	SuccessRedirectURL         string
 	EmailChangeRequestURL      *url.URL
 	EmailChangeRequestMaxAge   time.Duration
-	EmailSender                EmailSender
+	MailSender                 MailSender
 
 	accountSettingsTemplateCache *template.Template
 }
 
-func (d *DoAccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (d *DoAccountHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	loginSession, _ := GetSessionUser(d.SessionStore, r.Context())
 	if loginSession == nil {
 		d.Log.Debug("User unauthenticated. The request was redirected to UnauthenticatedRedirectURL.")
@@ -747,7 +753,7 @@ func (d *DoAccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func (d *DoAccountSettingsHandler) HandleGeneralUpdate(w http.ResponseWriter, r *http.Request, loginSession *SessionUser, user *User) {
+func (d *DoAccountHandler) HandleGeneralUpdate(w http.ResponseWriter, r *http.Request, loginSession *SessionUser, user *User) {
 	var avatar *string
 	var displayName *string
 	var fieldErrors AccountGeneralUpdateErrors
@@ -852,46 +858,22 @@ func (d *DoAccountSettingsHandler) HandleGeneralUpdate(w http.ResponseWriter, r 
 	loginSession.AvatarURL = user.AvatarURL
 	loginSession.DisplayName = user.DisplayName
 	PutSessionUser(d.SessionStore, r.Context(), loginSession)
-	PutSessionFlash(d.SessionStore, r.Context(),
-		"General Infomation was successfully updated.", FlashLevelSuccess)
+	PutSessionFlash(d.SessionStore, r.Context(), "General Infomation was successfully updated.", FlashLevelSuccess)
 	http.Redirect(w, r, d.SuccessRedirectURL, http.StatusSeeOther)
 }
 
-type EmailChangeTemplateData struct {
+type EmailChangeRequestMailTemplateData struct {
 	Recipient string
 	Link      string
 }
 
-func (d *DoAccountSettingsHandler) HandleEmailUpdate(w http.ResponseWriter, r *http.Request, sessionUser *SessionUser, user *User) {
-	newEmail := r.FormValue("new-email")
-
-	var emailError string
-	if l := len(newEmail); l == 0 {
-		emailError = "Please fill out this field."
-	} else if _, err := mail.ParseAddress(newEmail); err != nil || l > 255 {
-		emailError = "Value is invalid email."
-	} else if newEmail == user.Email {
-		emailError = "Use a different email address."
-	}
-
-	if emailError != "" {
-		d.Log.Debug("Account email update failed validation.", "error", emailError)
-		d.RenderPage(w, AccountSettingsTemplateData{
-			LoginSession:     sessionUser,
-			Focus:            "email",
-			User:             user,
-			EmailUpdateValue: newEmail,
-			EmailUpdateError: emailError,
-		})
-		return
-	}
-
+func (d *DoAccountHandler) HandleEmailUpdate(w http.ResponseWriter, r *http.Request, sessionUser *SessionUser, user *User) {
 	emailChangeRequest, err := d.EmailChangeRequestCreator.CreateEmailChangeRequest(
 		r.Context(),
 		NewEmailChangeRequest{
-			UserID:    user.ID,
-			NewEmail:  newEmail,
-			ExpiresAt: time.Now().Add(d.EmailChangeRequestMaxAge),
+			UserID:       user.ID,
+			CurrentEmail: user.Email,
+			ExpiresAt:    time.Now().Add(d.EmailChangeRequestMaxAge),
 		},
 	)
 	if err != nil {
@@ -901,10 +883,9 @@ func (d *DoAccountSettingsHandler) HandleEmailUpdate(w http.ResponseWriter, r *h
 				Level:   FlashLevelError,
 				Message: "Something went wrong. Please try again later.",
 			},
-			LoginSession:     sessionUser,
-			User:             user,
-			Focus:            "email",
-			EmailUpdateValue: newEmail,
+			LoginSession: sessionUser,
+			User:         user,
+			Focus:        "email",
 		})
 		return
 	}
@@ -919,7 +900,7 @@ func (d *DoAccountSettingsHandler) HandleEmailUpdate(w http.ResponseWriter, r *h
 	msg.WriteString("Content-Type: text/html; charset=UTF-8\n")
 	msg.WriteString("\n")
 	err = template.Must(template.ParseFS(d.TemplateFS, "mail/change_email.html")).
-		Execute(&msg, EmailChangeTemplateData{
+		Execute(&msg, EmailChangeRequestMailTemplateData{
 			Recipient: user.DisplayName,
 			Link:      link.String(),
 		})
@@ -930,25 +911,23 @@ func (d *DoAccountSettingsHandler) HandleEmailUpdate(w http.ResponseWriter, r *h
 				Level:   FlashLevelError,
 				Message: "Something went wrong. Please try again later.",
 			},
-			LoginSession:     sessionUser,
-			User:             user,
-			Focus:            "email",
-			EmailUpdateValue: newEmail,
+			LoginSession: sessionUser,
+			User:         user,
+			Focus:        "email",
 		})
 		return
 	}
 
 	go func() {
-		err := d.EmailSender.SendMail(r.Context(), user.Email, msg.Bytes())
+		err := d.MailSender.SendMail(r.Context(), user.Email, msg.Bytes())
 		if err != nil {
 			d.Log.Error("Unable send email.", "reason", err.Error())
 		}
 	}()
 
 	d.Log.Debug(
-		"Email change request was successful.",
+		"A link has been sent through your current email.",
 		"user_id", emailChangeRequest.UserID,
-		"new_email", emailChangeRequest.NewEmail,
 		"code", emailChangeRequest.Code,
 	)
 	d.RenderPage(w, AccountSettingsTemplateData{
@@ -961,7 +940,7 @@ func (d *DoAccountSettingsHandler) HandleEmailUpdate(w http.ResponseWriter, r *h
 	})
 }
 
-func (d *DoAccountSettingsHandler) HandlePasswordUpdate(w http.ResponseWriter, r *http.Request, userSession *SessionUser, user *User) {
+func (d *DoAccountHandler) HandlePasswordUpdate(w http.ResponseWriter, r *http.Request, userSession *SessionUser, user *User) {
 	fieldValues := AccountPasswordUpdateValues{
 		CurrentPassword: r.FormValue("current-password"),
 		NewPassword:     r.FormValue("new-password"),
@@ -981,7 +960,7 @@ func (d *DoAccountSettingsHandler) HandlePasswordUpdate(w http.ResponseWriter, r
 		return
 	}
 
-	localAccount, _, err := d.LocalAccountStore.GetLocalAccount(r.Context(), user.Email)
+	localAccount, _, err := d.LocalAccountStore.GetLocalAccountByEmail(r.Context(), user.Email)
 	if err != nil {
 		if errors.Is(err, ErrNoLocalAccount) {
 			d.Log.Debug("Failed to update password, no local account was found.")
@@ -1056,7 +1035,7 @@ func (d *DoAccountSettingsHandler) HandlePasswordUpdate(w http.ResponseWriter, r
 	http.Redirect(w, r, d.SuccessRedirectURL, http.StatusSeeOther)
 }
 
-func (d *DoAccountSettingsHandler) ValidatePasswordUpdateValues(data AccountPasswordUpdateValues) (valid bool, fieldErrors AccountPasswordUpdateErrors) {
+func (d *DoAccountHandler) ValidatePasswordUpdateValues(data AccountPasswordUpdateValues) (valid bool, fieldErrors AccountPasswordUpdateErrors) {
 	valid = true
 
 	if data.CurrentPassword == "" {
@@ -1088,10 +1067,10 @@ func (d *DoAccountSettingsHandler) ValidatePasswordUpdateValues(data AccountPass
 	return valid, fieldErrors
 }
 
-func (a *DoAccountSettingsHandler) RenderPage(w http.ResponseWriter, data AccountSettingsTemplateData) {
+func (a *DoAccountHandler) RenderPage(w http.ResponseWriter, data AccountSettingsTemplateData) {
 	if a.accountSettingsTemplateCache == nil {
 		var err error
-		a.accountSettingsTemplateCache, err = template.ParseFS(a.TemplateFS, "base.html", "account_settings.html")
+		a.accountSettingsTemplateCache, err = template.ParseFS(a.TemplateFS, "base.html", "account.html")
 		if err != nil {
 			panic("unable to parse account settings template: " + err.Error())
 		}
@@ -1100,4 +1079,326 @@ func (a *DoAccountSettingsHandler) RenderPage(w http.ResponseWriter, data Accoun
 	if err != nil {
 		panic("unable to execute account settings template: " + err.Error())
 	}
+}
+
+type AccountChangeEmailHandler struct {
+	Log                      *slog.Logger
+	PageRenderer             PageRenderer
+	SessionManager           *scs.SessionManager
+	EmailChangeRequestGetter EmailChangeRequestGetter
+}
+
+func (a *AccountChangeEmailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	sessionUser, _ := GetSessionUser(a.SessionManager, r.Context())
+
+	requestCode := r.FormValue("request-code")
+	if requestCode == "" {
+		a.Log.Debug("Request code for email change is invalid.", "request_code", requestCode)
+		a.Error(w, sessionUser, "Request code for email change is invalid.")
+		return
+	}
+
+	emailChangeRequest, err := a.EmailChangeRequestGetter.GetEmailChangeRequest(r.Context(), requestCode)
+	if err != nil {
+		if errors.Is(err, ErrNoEmailChangeRequest) {
+			a.Log.Debug("Request code for email change is invalid.", "request_code", requestCode)
+			a.Error(w, sessionUser, "Request code for email change is invalid.")
+			return
+		}
+
+		a.Log.Error("Unexpected error occurred while getting email change request by user id.", "reason", err.Error())
+		a.Error(w, sessionUser, "Something went wrong. Please try again later.")
+		return
+	}
+
+	if requestCode != emailChangeRequest.Code {
+		a.Log.Debug("Request code for the user doesn't match the one stored in database.", "request_code", requestCode)
+		a.Error(w, sessionUser, "Request code for email change is invalid.")
+		return
+	}
+
+	if time.Now().After(emailChangeRequest.ExpiresAt) {
+		a.Log.Debug("Request code for email change is no longer valid.", "request_code", requestCode)
+		a.Error(w, sessionUser, "Request code for email change is no longer invalid.")
+		return
+	}
+
+	sessionUser, _ = GetSessionUser(a.SessionManager, r.Context())
+	err = a.PageRenderer.RenderPage(w, "change_email.html", AccountChangeEmailPage{
+		LoginSession: sessionUser,
+		RequestCode:  requestCode,
+		Form:         NewAccountChangeEmailForm(),
+	})
+	if err != nil {
+		panic("unable to render change_email.html page: " + err.Error())
+	}
+}
+
+func (a *AccountChangeEmailHandler) Error(w http.ResponseWriter, sessionUser *SessionUser, message string) {
+	err := a.PageRenderer.RenderPage(w, "change_email_error.html", ChangeEmailErrorPage{
+		LoginSession: sessionUser,
+		Message:      message,
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+type DoAccountChangeEmailHandler struct {
+	Log                      *slog.Logger
+	PageRenderer             PageRenderer
+	SessionManager           *scs.SessionManager
+	EmailChangeRequestGetter EmailChangeRequestGetter
+	MailSender               MailSender
+	VerificationRedirectURL  string
+}
+
+type EmailChangeRequestGetter interface {
+	GetEmailChangeRequest(ctx context.Context, code string) (*EmailChangeRequest, error)
+}
+
+func (a *DoAccountChangeEmailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	sessionUser, _ := GetSessionUser(a.SessionManager, r.Context())
+	requestCode := r.FormValue("request-code")
+	if requestCode == "" {
+		a.Log.Debug("Request code for email change is invalid.", "request_code", requestCode)
+		a.Error(w, sessionUser, "Request Code for email change is invalid")
+		return
+	}
+
+	form := NewAccountChangeEmailForm()
+	form.NewEmail = r.FormValue("new-email")
+	form.Password = r.FormValue("password")
+
+	form.Check(form.NewEmail == "", "new-email", "Please fill out this field.")
+	form.Check(InvalidEmail(form.NewEmail), "new-email", "Value is invalid email.")
+	form.Check(form.Password == "", "password", "Please fill out this field.")
+
+	if !form.Valid() {
+		a.Log.Debug("Validation failed.", "field_errors", form.FieldErrors)
+		a.PageRenderer.RenderPage(w, "change_email.html", AccountChangeEmailPage{
+			LoginSession: sessionUser,
+			RequestCode:  requestCode,
+			Form:         form,
+		})
+		return
+	}
+
+	emailChangeRequest, err := a.EmailChangeRequestGetter.GetEmailChangeRequest(r.Context(), requestCode)
+	if err != nil {
+		if errors.Is(err, ErrNoEmailChangeRequest) {
+			a.Log.Debug("No email change request found.", "request_code", requestCode)
+			a.Error(w, sessionUser, "Request Code for email change is invalid")
+			return
+		}
+
+		a.Log.Error("Unexpected error occurred while getting email change request.", "reason", err.Error())
+		a.Error(w, sessionUser, "Something went wrong. Please try again later.")
+		return
+	}
+
+	if requestCode != emailChangeRequest.Code {
+		a.Log.Debug("Request code for the user doesn't match the one stored in database.", "request_code", requestCode)
+		a.Error(w, sessionUser, "Request code for email change is invalid.")
+		return
+	}
+
+	if time.Now().After(emailChangeRequest.ExpiresAt) {
+		a.Log.Debug("Request code for email change is no longer valid.", "request_code", requestCode)
+		a.Error(w, sessionUser, "Request code for email change is no longer valid.")
+		return
+	}
+
+	if form.NewEmail == emailChangeRequest.CurrentEmail {
+		a.Log.Debug("The current email is the same as the new email.")
+		form.Add("new-email", "Please use a different email.")
+		a.PageRenderer.RenderPage(w, "change_email.html", AccountChangeEmailPage{
+			LoginSession: sessionUser,
+			RequestCode:  requestCode,
+			Form:         form,
+		})
+		return
+	}
+
+	verificationCode := nanoid.Must(6)
+	a.SessionManager.Put(r.Context(), SessionKeyChangeEmail, SessionChangeEmail{
+		UserID:           emailChangeRequest.UserID,
+		NewEmail:         form.NewEmail,
+		VerificationCode: verificationCode,
+	})
+
+	go func() {
+		err = a.SendMail(r.Context(), form.NewEmail, verificationCode)
+		if err != nil {
+			a.Log.Error("Failed to send mail.", "email", emailChangeRequest.CurrentEmail)
+		}
+	}()
+	a.Log.Debug("Email verification was sent on email.", "user_id", emailChangeRequest.UserID)
+	http.Redirect(w, r, a.VerificationRedirectURL, http.StatusSeeOther)
+}
+
+func (d *DoAccountChangeEmailHandler) SendMail(ctx context.Context, email string, code string) error {
+	var msg bytes.Buffer
+	fmt.Fprintln(&msg, "Subject: Amponin Email Change Verification")
+	fmt.Fprintln(&msg, "")
+	fmt.Fprintln(&msg, "Your verification code is:", code)
+
+	return d.MailSender.SendMail(context.Background(), email, msg.Bytes())
+}
+
+func (d *DoAccountChangeEmailHandler) Error(w http.ResponseWriter, sessionUser *SessionUser, message string) {
+	err := d.PageRenderer.RenderPage(w, "change_email_error.html", ChangeEmailErrorPage{
+		LoginSession: sessionUser,
+		Message:      message,
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+const SessionKeyChangeEmail = "session_email_change_values"
+
+type SessionChangeEmail struct {
+	UserID           string
+	NewEmail         string
+	VerificationCode string
+	Tries            int
+}
+
+type AccountChangeEmailForm struct {
+	NewEmail string
+	Password string
+	*FieldValidation
+}
+
+func NewAccountChangeEmailForm() AccountChangeEmailForm {
+	return AccountChangeEmailForm{
+		FieldValidation: NewFieldValidation(),
+	}
+}
+
+type AccountChangeEmailPage struct {
+	Flash        *Flash
+	LoginSession *SessionUser
+	RequestCode  string
+	Form         AccountChangeEmailForm
+}
+
+type ChangeEmailVerificationHandler struct {
+	PageRenderer   PageRenderer
+	SessionManager *scs.SessionManager
+}
+
+func (c *ChangeEmailVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	sessionUser, _ := GetSessionUser(c.SessionManager, r.Context())
+	sessionChangeEmail, ok := c.SessionManager.Get(r.Context(), SessionKeyChangeEmail).(*SessionChangeEmail)
+	if !ok {
+		PutSessionFlash(c.SessionManager, r.Context(), "Invalid state. Please restart email change process.", FlashLevelError)
+		c.PageRenderer.RenderPage(w, "email_change_error.html", ChangeEmailErrorPage{
+			LoginSession: sessionUser,
+			Message:      "Something went wrong. Please restart email change process.",
+		})
+		return
+	}
+
+	err := c.PageRenderer.RenderPage(w, "change_email_verification.html", ChangeEmailVerificationPage{
+		LoginSession: sessionUser,
+		NewEmail:     sessionChangeEmail.NewEmail,
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+type DoChangeEmailVerficationHandler struct {
+	Log             *slog.Logger
+	PageRenderer    PageRenderer
+	SessionManager  *scs.SessionManager
+	UserInfoUpdater UserInfoUpdater
+}
+
+func (d *DoChangeEmailVerficationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	sessionUser, _ := GetSessionUser(d.SessionManager, r.Context())
+	sessionChangeEmail, ok := d.SessionManager.Get(r.Context(), SessionKeyChangeEmail).(*SessionChangeEmail)
+	if !ok {
+		PutSessionFlash(d.SessionManager, r.Context(), "Invalid state. Please restart email change process.", FlashLevelError)
+		err := d.PageRenderer.RenderPage(w, "change_email_error.html", ChangeEmailErrorPage{
+			LoginSession: sessionUser,
+			Message:      "Invalid state. Please restart email change process.",
+		})
+		if err != nil {
+			panic(err)
+		}
+		return
+	}
+
+	verificationCode := r.FormValue("verification-code")
+	if verificationCode == "" {
+		err := d.PageRenderer.RenderPage(w, "change_email_verification.html", ChangeEmailVerificationPage{
+			LoginSession:          sessionUser,
+			NewEmail:              sessionChangeEmail.NewEmail,
+			VerificationCodeError: "Please fill out this field.",
+		})
+		if err != nil {
+			panic(err)
+		}
+		return
+	}
+
+	if verificationCode != sessionChangeEmail.VerificationCode {
+		sessionChangeEmail.Tries++
+		d.SessionManager.Put(r.Context(), SessionKeyChangeEmail, sessionChangeEmail)
+		err := d.PageRenderer.RenderPage(w, "change_email_verification.html", ChangeEmailVerificationPage{
+			LoginSession:          sessionUser,
+			NewEmail:              sessionChangeEmail.NewEmail,
+			VerificationCodeError: "Verification code invalid.",
+			VerificationCode:      verificationCode,
+		})
+		if err != nil {
+			panic(err)
+		}
+		return
+	}
+
+	_, err := d.UserInfoUpdater.UpdateUserInfo(r.Context(), sessionChangeEmail.UserID, UserInfoUpdate{
+		Email: &sessionChangeEmail.NewEmail,
+	})
+	if err != nil {
+		err := d.PageRenderer.RenderPage(w, "change_email_error.html", ChangeEmailErrorPage{
+			LoginSession: sessionUser,
+			Message:      "Something went wrong. Please try again later.",
+		})
+		if err != nil {
+			panic(err)
+		}
+	}
+	d.Log.Debug("Email change was successful.", "user_id", sessionChangeEmail.UserID, "new_email", sessionChangeEmail.NewEmail)
+	err = d.PageRenderer.RenderPage(w, "change_email_success.html", ChangeEmailSuccessPage{
+		LoginSession: sessionUser,
+		NewEmail:     sessionChangeEmail.NewEmail,
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+type ChangeEmailVerificationPage struct {
+	LoginSession          *SessionUser
+	NewEmail              string
+	VerificationCode      string
+	VerificationCodeError string
+}
+
+type ChangeEmailSuccessPage struct {
+	LoginSession *SessionUser
+	NewEmail     string
+}
+
+type ChangeEmailErrorPage struct {
+	LoginSession *SessionUser
+	Message      string
+}
+
+type MailSender interface {
+	SendMail(ctx context.Context, email string, msg []byte) error
 }

@@ -90,7 +90,7 @@ func (p *PGStore) UpdateLocalAccountPassword(ctx context.Context, userID string,
 	return localAccount, nil
 }
 
-func (p *PGStore) GetLocalAccount(ctx context.Context, email string) (*LocalAccount, *User, error) {
+func (p *PGStore) GetLocalAccountByEmail(ctx context.Context, email string) (*LocalAccount, *User, error) {
 	user := &User{}
 	err := p.db.QueryRowContext(ctx,
 		`SELECT user_id, email, display_name, avatar_url,
@@ -124,6 +124,24 @@ func (p *PGStore) GetLocalAccount(ctx context.Context, email string) (*LocalAcco
 	}
 
 	return localAccount, user, nil
+}
+
+func (p *PGStore) GetLocalAccount(ctx context.Context, userID string) (*LocalAccount, error) {
+	localAccount := &LocalAccount{}
+	err := p.db.QueryRowContext(ctx,
+		`SELECT password_hash, created_at, updated_at
+		 FROM local_accounts
+		 WHERE user_id = $1`,
+		userID,
+	).Scan(&localAccount.PasswordHash, &localAccount.CreatedAt, &localAccount.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoLocalAccount
+		}
+		return nil, fmt.Errorf("unable to query user's local account: %w", err)
+	}
+
+	return localAccount, nil
 }
 
 func (p *PGStore) GetUserByID(ctx context.Context, userID string) (*User, error) {
@@ -422,25 +440,45 @@ func (p *PGStore) FindPetByLocation(ctx context.Context, location *Coordinates, 
 
 func (p *PGStore) CreateEmailChangeRequest(ctx context.Context, data NewEmailChangeRequest) (*EmailChangeRequest, error) {
 	row := p.db.QueryRowContext(ctx,
-		`INSERT INTO email_change_request (user_id, new_email, expires_at)
+		`INSERT INTO email_change_request (user_id, current_email, expires_at)
 		 VALUES ($1, $2, $3)
 		 ON CONFLICT (user_id)
 		 DO UPDATE 
 			SET code = nanoid(12),
-			new_email = $2,
+			current_email = $2,
 			expires_at = $3,
 			created_at = now()
 		 RETURNING 
-			user_id, code, new_email, expires_at, created_at`,
-		data.UserID, data.NewEmail, data.ExpiresAt,
+			code, user_id, current_email, expires_at, created_at`,
+		data.UserID, data.CurrentEmail, data.ExpiresAt,
 	)
 
 	result := &EmailChangeRequest{}
-	err := row.Scan(&result.UserID, &result.Code, &result.NewEmail, &result.ExpiresAt, &result.CreatedAt)
+	err := row.Scan(&result.Code, &result.UserID, &result.CurrentEmail, &result.ExpiresAt, &result.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("unable to insert into email change request table: %w", err)
 	}
 
 	return result, nil
 
+}
+
+func (p *PGStore) GetEmailChangeRequest(ctx context.Context, code string) (*EmailChangeRequest, error) {
+	row := p.db.QueryRowContext(ctx,
+		`SELECT code, user_id, current_email, expires_at, created_at
+		 FROM email_change_request
+		 WHERE code = $1`,
+		code,
+	)
+
+	result := &EmailChangeRequest{}
+	err := row.Scan(&result.Code, &result.UserID, &result.CurrentEmail, &result.ExpiresAt, &result.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoEmailChangeRequest
+		}
+		return nil, fmt.Errorf("unable to query for email_change_request using user_id: %w", err)
+	}
+
+	return result, nil
 }

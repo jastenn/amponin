@@ -86,6 +86,8 @@ func main() {
 		panic("failed to ping database: " + err.Error())
 	}
 
+	pageRenderer := NewFSPageRenderer(templatesFS)
+
 	postgresDataStore := &PGStore{
 		db: databaseConnection,
 	}
@@ -106,8 +108,9 @@ func main() {
 		),
 	)
 	handler.Handle("GET /", &IndexHandler{
-		SessionManager: sessionManager,
-		TemplateFS:     templatesFS,
+		SessionManager:  sessionManager,
+		TemplateFS:      templatesFS,
+		NotFoundHandler: http.NotFoundHandler(),
 	})
 	handler.Handle("GET /signup", &SignupHandler{
 		Log:                 log.With("path", "GET /signup"),
@@ -129,7 +132,7 @@ func main() {
 		SignupRedirectURL: "/signup",
 	})
 	handler.Handle("POST /signup/completion", &DoSignupCompletionHandler{
-		Log:                 log.With("POST /signup/completion"),
+		Log:                 log.With("path", "POST /signup/completion"),
 		TemplateFS:          templatesFS,
 		SessionManager:      sessionManager,
 		SucccessRedirectURL: "/login",
@@ -143,12 +146,12 @@ func main() {
 		SuccessRedirectURL: "/",
 	})
 	handler.Handle("POST /login", &DoLoginHandler{
-		Log:                log.With("path", "POST /login"),
-		TemplateFS:         templatesFS,
-		SessionManager:     sessionManager,
-		SuccessRedirectURL: "/",
-		LoginSessionMaxAge: time.Hour * 24 * 7,
-		LocalAccountGetter: postgresDataStore,
+		Log:                       log.With("path", "POST /login"),
+		TemplateFS:                templatesFS,
+		SessionManager:            sessionManager,
+		SuccessRedirectURL:        "/",
+		LoginSessionMaxAge:        time.Hour * 24 * 7,
+		LocalAccountGetterByEmail: postgresDataStore,
 	})
 	handler.Handle("POST /logout", &DoLogout{
 		Log:            log.With("path", "POST /logout"),
@@ -160,30 +163,54 @@ func main() {
 		TemplateFS:          templatesFS,
 		PetFinderByLocation: postgresDataStore,
 	})
-	handler.Handle("GET /account-settings", &AccountSettingsHandler{
-		Log:              log.With("path", "GET /account-settings"),
+	handler.Handle("GET /account", &AccountSettingsHandler{
+		Log:              log.With("path", "GET /account"),
 		TemplateFS:       templatesFS,
 		SessionManager:   sessionManager,
 		UserGetterByID:   postgresDataStore,
-		LoginRedirectURL: "/login?callback=%2Faccount-settings",
+		LoginRedirectURL: "/login?callback=%2Faccount",
 	})
-	handler.Handle("POST /account-settings", &DoAccountSettingsHandler{
+	handler.Handle("POST /account", &DoAccountHandler{
 		TemplateFS:                 templatesFS,
-		Log:                        log.With("path", "POST /account-settings"),
+		Log:                        log.With("path", "POST /account"),
 		SessionStore:               sessionManager,
 		UserStore:                  postgresDataStore,
 		FileStore:                  fileStore,
-		UnauthenticatedRedirectURL: "/login?callback=%2Faccount-settings",
-		EmailSender:                googleEmailSender,
+		UnauthenticatedRedirectURL: "/login?callback=%2Faccount",
+		MailSender:                 googleEmailSender,
 		EmailChangeRequestCreator:  postgresDataStore,
 		EmailChangeRequestURL: &url.URL{
 			Scheme: "https",
 			Host:   *host,
-			Path:   "/account-settings/change-email",
+			Path:   "/account/change-email",
 		},
 		EmailChangeRequestMaxAge: time.Minute * 5,
-		SuccessRedirectURL:       "/account-settings",
+		SuccessRedirectURL:       "/account",
 		LocalAccountStore:        postgresDataStore,
+	})
+	handler.Handle("GET /account/change-email", &AccountChangeEmailHandler{
+		Log:                      log.With("path", "GET /account/change-email"),
+		PageRenderer:             pageRenderer,
+		SessionManager:           sessionManager,
+		EmailChangeRequestGetter: postgresDataStore,
+	})
+	handler.Handle("POST /account/change-email", &DoAccountChangeEmailHandler{
+		Log:                      log.With("path", "POST /account/change-email"),
+		PageRenderer:             pageRenderer,
+		SessionManager:           sessionManager,
+		EmailChangeRequestGetter: postgresDataStore,
+		MailSender:               googleEmailSender,
+		VerificationRedirectURL:  "/account/change-email/verification",
+	})
+	handler.Handle("GET /account/change-email/verification", &ChangeEmailVerificationHandler{
+		PageRenderer:   pageRenderer,
+		SessionManager: sessionManager,
+	})
+	handler.Handle("POST /account/change-email/verification", &DoChangeEmailVerficationHandler{
+		Log:             log.With("path", "POST /account/change-email/verification"),
+		SessionManager:  sessionManager,
+		PageRenderer:    pageRenderer,
+		UserInfoUpdater: postgresDataStore,
 	})
 	handler.Handle("GET /shelter", &ShelterHandler{
 		Log:                log.With("path", "GET /shelter"),
