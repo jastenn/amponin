@@ -482,3 +482,21 @@ func (p *PGStore) GetEmailChangeRequest(ctx context.Context, code string) (*Emai
 
 	return result, nil
 }
+
+func (p *PGStore) RemoveEmailChangeRequest(ctx context.Context, code string) (*EmailChangeRequest, error) {
+	row := p.db.QueryRowContext(ctx,
+		`DELETE FROM email_change_request
+		 WHERE code = $1
+		 RETURNING 
+			code, user_id, current_email, expires_at, created_at`,
+		code,
+	)
+
+	result := &EmailChangeRequest{}
+	err := row.Scan(&result.Code, &result.UserID, &result.CurrentEmail, &result.ExpiresAt, &result.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("unable to delete from email_change_request table: %w", err)
+	}
+
+	return result, nil
+}

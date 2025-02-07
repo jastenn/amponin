@@ -6,8 +6,7 @@
 <main>
 	<div class="card container-xs">
 		<h1 id="account-email-change-heading" class="card__heading mx-auto">Change Account Email</h1>
-		<form action="/account/change-email" method="post" class="gap" aria-labelledby="account-email-change-heading">
-			<input type="hidden" name="request-code" value="{{ .RequestCode }}">
+		<form action="/account/change-email?request-code={{ .RequestCode }}" method="post" class="gap" aria-labelledby="account-email-change-heading">
 			<div>
 				<label for="new-email" class="form-label">New Email</label>	
 				<input id="new-email" type="text" name="new-email"

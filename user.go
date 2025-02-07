@@ -1088,10 +1088,14 @@ type AccountChangeEmailHandler struct {
 	EmailChangeRequestGetter EmailChangeRequestGetter
 }
 
+type EmailChangeRequestGetter interface {
+	GetEmailChangeRequest(ctx context.Context, code string) (*EmailChangeRequest, error)
+}
+
 func (a *AccountChangeEmailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sessionUser, _ := GetSessionUser(a.SessionManager, r.Context())
 
-	requestCode := r.FormValue("request-code")
+	requestCode := r.URL.Query().Get("request-code")
 	if requestCode == "" {
 		a.Log.Debug("Request code for email change is invalid.", "request_code", requestCode)
 		a.Error(w, sessionUser, "Request code for email change is invalid.")
@@ -1145,16 +1149,16 @@ func (a *AccountChangeEmailHandler) Error(w http.ResponseWriter, sessionUser *Se
 }
 
 type DoAccountChangeEmailHandler struct {
-	Log                      *slog.Logger
-	PageRenderer             PageRenderer
-	SessionManager           *scs.SessionManager
-	EmailChangeRequestGetter EmailChangeRequestGetter
-	MailSender               MailSender
-	VerificationRedirectURL  string
-}
-
-type EmailChangeRequestGetter interface {
-	GetEmailChangeRequest(ctx context.Context, code string) (*EmailChangeRequest, error)
+	Log                     *slog.Logger
+	PageRenderer            PageRenderer
+	SessionManager          *scs.SessionManager
+	EmailChangeRequestStore interface {
+		EmailChangeRequestGetter
+		RemoveEmailChangeRequest(ctx context.Context, code string) (*EmailChangeRequest, error)
+	}
+	LocalAccountGetterByEmail LocalAccountGetterByEmail
+	MailSender                MailSender
+	VerificationRedirectURL   string
 }
 
 func (a *DoAccountChangeEmailHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -1184,7 +1188,7 @@ func (a *DoAccountChangeEmailHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	emailChangeRequest, err := a.EmailChangeRequestGetter.GetEmailChangeRequest(r.Context(), requestCode)
+	emailChangeRequest, err := a.EmailChangeRequestStore.GetEmailChangeRequest(r.Context(), requestCode)
 	if err != nil {
 		if errors.Is(err, ErrNoEmailChangeRequest) {
 			a.Log.Debug("No email change request found.", "request_code", requestCode)
@@ -1209,6 +1213,25 @@ func (a *DoAccountChangeEmailHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	localAccount, _, err := a.LocalAccountGetterByEmail.GetLocalAccountByEmail(r.Context(), emailChangeRequest.CurrentEmail)
+	if err != nil {
+		a.Log.Error("Unable to get user's local account by email.", "user_id", emailChangeRequest.UserID, "email", emailChangeRequest.CurrentEmail)
+		a.Error(w, sessionUser, "Something went wrong. Please try again later.")
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword(localAccount.PasswordHash, []byte(form.Password))
+	if err != nil {
+		a.Log.Debug("Password comparison failed.", "user_id", emailChangeRequest.UserID)
+		form.Add("password", "Incorrect password.")
+		a.PageRenderer.RenderPage(w, "change_email.html", AccountChangeEmailPage{
+			LoginSession: sessionUser,
+			RequestCode:  requestCode,
+			Form:         form,
+		})
+		return
+	}
+
 	if form.NewEmail == emailChangeRequest.CurrentEmail {
 		a.Log.Debug("The current email is the same as the new email.")
 		form.Add("new-email", "Please use a different email.")
@@ -1221,18 +1244,26 @@ func (a *DoAccountChangeEmailHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 	}
 
 	verificationCode := nanoid.Must(6)
-	a.SessionManager.Put(r.Context(), SessionKeyChangeEmail, SessionChangeEmail{
-		UserID:           emailChangeRequest.UserID,
-		NewEmail:         form.NewEmail,
-		VerificationCode: verificationCode,
-	})
-
 	go func() {
 		err = a.SendMail(r.Context(), form.NewEmail, verificationCode)
 		if err != nil {
 			a.Log.Error("Failed to send mail.", "email", emailChangeRequest.CurrentEmail)
 		}
 	}()
+
+	_, err = a.EmailChangeRequestStore.RemoveEmailChangeRequest(r.Context(), requestCode)
+	if err != nil {
+		a.Log.Error("Unable to remove email change request.", "reason", err.Error())
+		a.Error(w, sessionUser, "Something went wrong. Please try again later.")
+		return
+	}
+
+	a.SessionManager.Put(r.Context(), SessionKeyChangeEmail, SessionChangeEmail{
+		UserID:           emailChangeRequest.UserID,
+		NewEmail:         form.NewEmail,
+		VerificationCode: verificationCode,
+	})
+
 	a.Log.Debug("Email verification was sent on email.", "user_id", emailChangeRequest.UserID)
 	http.Redirect(w, r, a.VerificationRedirectURL, http.StatusSeeOther)
 }
@@ -1321,7 +1352,7 @@ func (d *DoChangeEmailVerficationHandler) ServeHTTP(w http.ResponseWriter, r *ht
 	sessionUser, _ := GetSessionUser(d.SessionManager, r.Context())
 	sessionChangeEmail, ok := d.SessionManager.Get(r.Context(), SessionKeyChangeEmail).(*SessionChangeEmail)
 	if !ok {
-		PutSessionFlash(d.SessionManager, r.Context(), "Invalid state. Please restart email change process.", FlashLevelError)
+		d.Log.Error("Invalid state. Please restart email change process.")
 		err := d.PageRenderer.RenderPage(w, "change_email_error.html", ChangeEmailErrorPage{
 			LoginSession: sessionUser,
 			Message:      "Invalid state. Please restart email change process.",
@@ -1330,6 +1361,18 @@ func (d *DoChangeEmailVerficationHandler) ServeHTTP(w http.ResponseWriter, r *ht
 			panic(err)
 		}
 		return
+	}
+
+	if sessionChangeEmail.Tries > 5 {
+		d.Log.Error("Too many incorrect verification code attempts.", "user_id", sessionChangeEmail.UserID)
+		d.SessionManager.Remove(r.Context(), SessionKeyChangeEmail)
+		err := d.PageRenderer.RenderPage(w, "change_email_error.html", ChangeEmailErrorPage{
+			LoginSession: sessionUser,
+			Message:      "Too many incorrect verification code attempts.",
+		})
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	verificationCode := r.FormValue("verification-code")
@@ -1372,6 +1415,8 @@ func (d *DoChangeEmailVerficationHandler) ServeHTTP(w http.ResponseWriter, r *ht
 			panic(err)
 		}
 	}
+
+	d.SessionManager.Remove(r.Context(), SessionKeyChangeEmail)
 	d.Log.Debug("Email change was successful.", "user_id", sessionChangeEmail.UserID, "new_email", sessionChangeEmail.NewEmail)
 	err = d.PageRenderer.RenderPage(w, "change_email_success.html", ChangeEmailSuccessPage{
 		LoginSession: sessionUser,

@@ -195,12 +195,13 @@ func main() {
 		EmailChangeRequestGetter: postgresDataStore,
 	})
 	handler.Handle("POST /account/change-email", &DoAccountChangeEmailHandler{
-		Log:                      log.With("path", "POST /account/change-email"),
-		PageRenderer:             pageRenderer,
-		SessionManager:           sessionManager,
-		EmailChangeRequestGetter: postgresDataStore,
-		MailSender:               googleEmailSender,
-		VerificationRedirectURL:  "/account/change-email/verification",
+		Log:                       log.With("path", "POST /account/change-email"),
+		PageRenderer:              pageRenderer,
+		SessionManager:            sessionManager,
+		EmailChangeRequestStore:   postgresDataStore,
+		LocalAccountGetterByEmail: postgresDataStore,
+		MailSender:                googleEmailSender,
+		VerificationRedirectURL:   "/account/change-email/verification",
 	})
 	handler.Handle("GET /account/change-email/verification", &ChangeEmailVerificationHandler{
 		PageRenderer:   pageRenderer,

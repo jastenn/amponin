@@ -1,0 +1,30 @@
+.response {
+	text-align: center;
+}
+
+.response__icon {
+	display: block;
+	width: 3.5rem;
+	margin: 0 auto;
+	margin-bottom: 1rem;
+}
+
+.response__icon--error {
+	color: var(--color-error, red);
+}
+
+.response__icon--success {
+	color: var(--color-success, green);
+}
+
+.response__heading {
+	font-size: 2rem;
+	text-transform: uppercase;
+	font-weight: 700;
+	margin-bottom: .5rem;
+}
+
+.response__subheading {
+	font-size: 1.125rem;
+	font-weight: 400;
+}
