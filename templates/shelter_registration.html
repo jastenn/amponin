@@ -28,25 +28,25 @@
 			<div>
 				<label for="name" class="form-label">Name</label>	
 				<input id="name" type="text" name="name"
-					value="{{ .Values.Name }}"
+					value="{{ .Form.Name }}"
 					class="form-control"
 					aria-describedby="name-error">
-				{{ with .Errors.Name }}
+				{{ with index .Form.FieldErrors `name` }}
 					<small id="name-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
 			<fieldset aria-describedby="location-error" class="gap">
 				<legend class="form-label">Location</legend>	
-				<location-input name="location-coordinates" value="{{ .Values.LocationCoordinates }}" class="form-control"></location-input>
-				<input name="location-address" value="{{ .Values.LocationAddress }}" type="text" class="form-control">
-				{{ with .Errors.Location }}
+				<location-input name="location-coordinates" value="{{ .Form.LocationCoordinates }}" class="form-control"></location-input>
+				<input name="location-address" value="{{ .Form.LocationAddress }}" type="text" class="form-control">
+				{{ with index .Form.FieldErrors `location` }}
 					<small id="location-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</fieldset>
 			<div>
 				<label for="description" class="form-label">Description</label>	
-				<textarea id="description" name="description" class="form-control">{{- .Values.Description -}}</textarea>
-				{{ with .Errors.Description }}
+				<textarea id="description" name="description" class="form-control">{{- .Form.Description -}}</textarea>
+				{{ with index .Form.FieldErrors `description` }}
 					<small id="description-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>

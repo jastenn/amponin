@@ -16,26 +16,23 @@
 				{{ .Message }}					
 			</div>
 		{{ end }}
-		<form action="/login" method="post" class="gap" aria-labelledby="login-heading">
-			{{ with .CallbackURL }}
-				<input type="hidden" name="callback" value="{{ . }}">
-			{{ end }}
+		<form action="/login?{{ with .CallbackURL }} callback={{ . }} {{- end }}" method="post" class="gap" aria-labelledby="login-heading">
 			<div>
 				<label for="email" class="form-label">Email</label>	
 				<input id="email" type="text" name="email"
-					value="{{ .Values.Email }}"
+					value="{{ .Form.Email }}"
 					class="form-control"
 					aria-describedby="email-error">
-				{{ with .Errors.Email }}
+				{{ with index .Form.FieldErrors `email` }}
 					<small id="email-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
 			<div>
 				<label for="password" class="form-label">Password</label>	
-				<input id="password" type="password" name="password" value="{{ .Values.Password }}"
+				<input id="password" type="password" name="password" value="{{ .Form.Password }}"
 					class="form-control"
 					aria-describedby="password-error">
-				{{ with .Errors.Password }}
+				{{ with index .Form.FieldErrors `password` }}
 					<small id="password-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>

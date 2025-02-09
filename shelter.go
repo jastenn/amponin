@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"html/template"
-	"io/fs"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,8 +38,46 @@ type Shelter struct {
 	UpdatedAt   time.Time
 }
 
-type ShelterRoleGetter interface {
-	GetShelterRoleByID(ctx context.Context, shelterID, userID string) (ShelterRole, error)
+type Coordinates struct {
+	Longitude float64
+	Latitude  float64
+}
+
+func ParseCoordinates(s string) (*Coordinates, error) {
+	xs := strings.Split(s, ",")
+	if len(xs) != 2 {
+		return nil, errors.New("invalid coordinates")
+	}
+
+	lat, err := strconv.ParseFloat(xs[0], 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid coordinates: latitude is invalid: %w", err)
+	}
+	if lat > 90 || lat < -90 {
+		return nil, fmt.Errorf("invalid coordinates: latitude out of bounds")
+	}
+
+	lng, err := strconv.ParseFloat(xs[1], 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid coordinates: longitude is invalid float: %w", err)
+	}
+	if lng > 180 || lng < -180 {
+		return nil, fmt.Errorf("invalid coordinates: latitude out of bounds")
+	}
+
+	return &Coordinates{
+		Latitude:  lat,
+		Longitude: lng,
+	}, nil
+}
+
+type ShelterHandler struct {
+	Log                  *slog.Logger
+	PageTemplateRenderer PageTemplateRenderer
+	SessionManager       *scs.SessionManager
+	UserSheltersFinder   interface {
+		FindSheltersByUserID(ctx context.Context, userID string) ([]*ShelterWithRole, error)
+	}
 }
 
 type ShelterWithRole struct {
@@ -46,35 +85,11 @@ type ShelterWithRole struct {
 	Shelter
 }
 
-type ShelterTemplateData struct {
-	Flash          *Flash
-	LoginSession   *SessionUser
-	ManagedShelter []*ShelterWithRole
-}
-
-type ShelterHandler struct {
-	Log                *slog.Logger
-	TemplateFS         fs.FS
-	SessionManager     *scs.SessionManager
-	UserSheltersFinder interface {
-		FindSheltersByUserID(ctx context.Context, userID string) ([]*ShelterWithRole, error)
-	}
-
-	shelterTemplateCache *template.Template
-}
-
 func (s *ShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	flash, _ := PopSessionFlash(s.SessionManager, r.Context())
-	loginSession, _ := GetSessionUser(s.SessionManager, r.Context())
-	if s.shelterTemplateCache == nil {
-		var err error
-		s.shelterTemplateCache, err = template.ParseFS(s.TemplateFS, "base.html", "shelters.html")
-		if err != nil {
-			panic("failed to parse shelter template: " + err.Error())
-		}
-	}
+	userSession, _ := GetSessionUser(s.SessionManager, r.Context())
 
-	shelters, err := s.UserSheltersFinder.FindSheltersByUserID(r.Context(), loginSession.UserID)
+	shelters, err := s.UserSheltersFinder.FindSheltersByUserID(r.Context(), userSession.UserID)
 	if err != nil {
 		s.Log.Error("Unable to query for shelter by user id.", "reason", err.Error())
 		flash = &Flash{
@@ -83,106 +98,89 @@ func (s *ShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	err = ExecuteTemplate(s.shelterTemplateCache, w, "base.html", ShelterTemplateData{
+	err = s.PageTemplateRenderer.RenderPageTemplate(w, "shelters.html", ShelterPage{
+		BasePage: BasePage{
+			SessionUser: userSession,
+		},
 		Flash:          flash,
-		LoginSession:   loginSession,
 		ManagedShelter: shelters,
 	})
 	if err != nil {
-		panic("failed to execute shelter template: " + err.Error())
+		panic(err)
 	}
 }
 
-type ShelterRegistrationTemplateData struct {
-	LoginSession *SessionUser
-	Flash        *Flash
-	Values       ShelterRegistrationValues
-	Errors       ShelterRegistrationErrors
-}
-
-type ShelterRegistrationValues struct {
-	Name                string
-	LocationAddress     string
-	LocationCoordinates string
-	Description         string
-}
-
-type ShelterRegistrationErrors struct {
-	Name        string
-	Location    string
-	Description string
-}
-
-func ValidateShelterRegistrationValues(values ShelterRegistrationValues) (errors ShelterRegistrationErrors, ok bool) {
-	if l := len(values.Name); l == 0 {
-		errors.Name = "Please fill out this field."
-	} else if l < 8 {
-		errors.Name = "Value must be at least 8 characters long."
-	} else if l > 50 {
-		errors.Name = "Value must not exceed 50 characters long."
-	}
-
-	if values.LocationCoordinates == "" || values.LocationAddress == "" {
-		errors.Location = "Please fill out this field."
-	} else if _, err := ParseCoordinates(values.LocationCoordinates); err != nil {
-		errors.Location = "Coordinates is invalid."
-	} else if addressLength := len(values.LocationAddress); addressLength < 8 {
-		errors.Location = "Address is too short. Please include more information"
-	} else if addressLength > 250 {
-		errors.Location = "Address is too long. It must not exceed 250 characters long."
-	}
-
-	if l := len(values.Description); l == 0 {
-		errors.Description = "Please fill out this field."
-		ok = false
-	} else if l < 250 {
-		errors.Description = "Value is too short. It must be at least 250 characters long."
-	} else if l > 2500 {
-		errors.Description = "Value is too long. It must not exceed 2,500 characters long."
-	}
-
-	if errors.Name != "" ||
-		errors.Location != "" ||
-		errors.Description != "" {
-
-		return errors, false
-	}
-
-	return ShelterRegistrationErrors{}, true
+type ShelterPage struct {
+	BasePage
+	Flash          *Flash
+	ManagedShelter []*ShelterWithRole
 }
 
 type ShelterRegistrationHandler struct {
-	TemplateFS              fs.FS
-	SessionStore            *scs.SessionManager
+	Log                     *slog.Logger
+	PageTemplateRenderer    PageTemplateRenderer
+	SessionManager          *scs.SessionManager
 	UnauthorizedRedirectURL string
-
-	shelterRegisterTemplateCache *template.Template
 }
 
 func (s *ShelterRegistrationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	loginSession, _ := GetSessionUser(s.SessionStore, r.Context())
-	if loginSession == nil {
-		PutSessionFlash(
-			s.SessionStore, r.Context(),
-			"Unauthorized, Please signup first.", FlashLevelError,
-		)
+	sessionUser, _ := GetSessionUser(s.SessionManager, r.Context())
+	if sessionUser == nil {
+		s.Log.Debug("User unauthorized. Redirecting request.")
+		flash := NewFlash("Unauthorized, Please signup first.", FlashLevelError)
+		s.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
 		http.Redirect(w, r, s.UnauthorizedRedirectURL, http.StatusSeeOther)
 		return
 	}
 
-	if s.shelterRegisterTemplateCache == nil {
-		var err error
-		s.shelterRegisterTemplateCache, err = template.ParseFS(s.TemplateFS, "base.html", "shelter_registration.html")
-		if err != nil {
-			panic("failed to parse shelter template: " + err.Error())
-		}
-	}
-	err := ExecuteTemplate(s.shelterRegisterTemplateCache, w, "base.html", ShelterRegistrationTemplateData{
-		LoginSession: loginSession,
+	r, _ = http.NewRequest(r.Method, r.URL.String(), nil)
+	err := s.PageTemplateRenderer.RenderPageTemplate(w, "shelter_registration.html", ShelterRegistrationPage{
+		BasePage: BasePage{
+			SessionUser: sessionUser,
+		},
+		Form: NewShelterRegistrationForm(r),
 	})
 	if err != nil {
-		panic("failed to execute shelter template: " + err.Error())
+		panic(err)
 	}
+}
+
+type ShelterRegistrationPage struct {
+	BasePage
+	Flash *Flash
+	Form  ShelterRegistrationForm
+}
+
+type ShelterRegistrationForm struct {
+	Name                string
+	LocationAddress     string
+	LocationCoordinates string
+	Description         string
+
+	*FieldValidation
+}
+
+func NewShelterRegistrationForm(r *http.Request) ShelterRegistrationForm {
+	return ShelterRegistrationForm{
+		Name:                r.FormValue("name"),
+		LocationCoordinates: r.FormValue("location-coordinates"),
+		LocationAddress:     r.FormValue("location-address"),
+		Description:         r.FormValue("description"),
+		FieldValidation:     NewFieldValidation(),
+	}
+}
+
+type DoShelterRegistrationHandler struct {
+	Log                  *slog.Logger
+	PageTemplateRenderer PageTemplateRenderer
+	SessionManager       *scs.SessionManager
+	ShelterCreator       interface {
+		CreateShelter(ctx context.Context, userID string, data NewShelter) (*Shelter, error)
+	}
+	UnauthorizedRedirectURL string
+	SuccessRedirectURL      string
+
+	shelterRegistrationTemplateCache *template.Template
 }
 
 type NewShelter struct {
@@ -192,57 +190,53 @@ type NewShelter struct {
 	Description string
 }
 
-type DoShelterRegistrationHandler struct {
-	Log            *slog.Logger
-	TemplateFS     fs.FS
-	SessionStore   *scs.SessionManager
-	ShelterCreator interface {
-		CreateShelter(ctx context.Context, userID string, data NewShelter) (*Shelter, error)
-	}
-	UnauthorizedRedirectURL string
-	SuccessRedirectURL      string
-
-	shelterRegistrationTemplateCache *template.Template
-}
-
 func (d *DoShelterRegistrationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	loginSession, _ := GetSessionUser(d.SessionStore, r.Context())
+	loginSession, _ := GetSessionUser(d.SessionManager, r.Context())
 	if loginSession == nil {
-		PutSessionFlash(d.SessionStore, r.Context(),
-			"Unauthorized, Please signup first.", FlashLevelError)
+		flash := NewFlash("Unauthorized, Please signup first.", FlashLevelError)
+		d.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
 		http.Redirect(w, r, d.UnauthorizedRedirectURL, http.StatusSeeOther)
 		return
 	}
 
-	fieldValues := ShelterRegistrationValues{
-		Name:                r.FormValue("name"),
-		LocationCoordinates: r.FormValue("location-coordinates"),
-		LocationAddress:     r.FormValue("location-address"),
-		Description:         r.FormValue("description"),
-	}
-	fieldErrors, ok := ValidateShelterRegistrationValues(fieldValues)
-	if !ok {
-		d.Log.Debug("Field values validation failed.", "field_values", fieldValues)
-		d.RenderTemplate(w, ShelterRegistrationTemplateData{
-			LoginSession: loginSession,
-			Values:       fieldValues,
-			Errors:       fieldErrors,
+	form := NewShelterRegistrationForm(r)
+
+	form.Check(form.Name == "", "name", "Please fill out this field.")
+	form.Check(len(form.Name) < 8, "name", "Value must be at least 8 characters long.")
+	form.Check(len(form.Name) > 50, "name", "Value must not exceed 50 characters long.")
+	form.Check(form.LocationAddress == "" || form.LocationCoordinates == "", "location", "Please fill out this field")
+	form.Check(IsInvalidCoordinates(form.LocationCoordinates), "location", "Coordinates is invalid.")
+	form.Check(len(form.LocationAddress) < 8, "location", "Address is too short. Please include more information.")
+	form.Check(len(form.LocationAddress) > 250, "location", "Address is too long. It must not exceed 250 characters long.")
+	form.Check(form.Description == "", "description", "Please fill out this field.")
+	form.Check(len(form.Description) < 250, "description", "Value is too short. It must be at least 250 characters long.")
+	form.Check(len(form.Description) > 2500, "description", "Value is too long. It must be not exceed 2,500 characters long.")
+
+	if !form.Valid() {
+		d.Log.Debug("Field values validation failed.", "field_errors", form.FieldErrors)
+		d.RenderPage(w, ShelterRegistrationPage{
+			BasePage: BasePage{
+				loginSession,
+			},
+			Form: form,
 		})
 		return
 	}
 
-	coordinates, _ := ParseCoordinates(fieldValues.LocationCoordinates)
+	coordinates, _ := ParseCoordinates(form.LocationCoordinates)
 	shelter, err := d.ShelterCreator.CreateShelter(r.Context(), loginSession.UserID, NewShelter{
-		Name:        fieldValues.Name,
+		Name:        form.Name,
 		Coordinates: *coordinates,
-		Address:     fieldValues.LocationAddress,
-		Description: fieldValues.Description,
+		Address:     form.LocationAddress,
+		Description: form.Description,
 	})
 	if err != nil {
 		d.Log.Error("Unexpected error while trying to register new shelter.", "reason", err.Error())
-		d.RenderTemplate(w, ShelterRegistrationTemplateData{
-			LoginSession: loginSession,
-			Values:       fieldValues,
+		d.RenderPage(w, ShelterRegistrationPage{
+			BasePage: BasePage{
+				loginSession,
+			},
+			Form: form,
 			Flash: &Flash{
 				Level:   FlashLevelError,
 				Message: "Something went wrong. Please try again later.",
@@ -252,54 +246,45 @@ func (d *DoShelterRegistrationHandler) ServeHTTP(w http.ResponseWriter, r *http.
 	}
 
 	d.Log.Debug("New shelter was registered.", "shelter_id", shelter.ID)
-	PutSessionFlash(d.SessionStore, r.Context(),
-		"Successfully created a new shelter.", FlashLevelSuccess)
+	flash := NewFlash("Successfully created a new shelter.", FlashLevelSuccess)
+	d.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
 	redirectURL := strings.ReplaceAll(d.SuccessRedirectURL, "{shelter_id}", shelter.ID)
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
 
-func (d *DoShelterRegistrationHandler) RenderTemplate(w http.ResponseWriter, data ShelterRegistrationTemplateData) {
-	if d.shelterRegistrationTemplateCache == nil {
-		var err error
-		d.shelterRegistrationTemplateCache, err = template.ParseFS(
-			d.TemplateFS,
-			"base.html", "shelter_registration.html",
-		)
-		if err != nil {
-			panic("failed to parse shelter registration template: " + err.Error())
-		}
-	}
-
-	err := ExecuteTemplate(d.shelterRegistrationTemplateCache, w, "base.html", data)
+func (d *DoShelterRegistrationHandler) RenderPage(w http.ResponseWriter, data ShelterRegistrationPage) {
+	err := d.PageTemplateRenderer.RenderPageTemplate(w, "shelter_registration.html", data)
 	if err != nil {
-		panic("failed to execute shelter registration template: " + err.Error())
+		panic(err)
 	}
 }
 
-type ShelterByIDTemplateData struct {
-	LoginSession *SessionUser
-	Flash        *Flash
-	Role         ShelterRole
-	Shelter      *Shelter
+type ShelterByIDPage struct {
+	BasePage
+	Flash   *Flash
+	Role    ShelterRole
+	Shelter *Shelter
 }
 
 type ShelterByIDHandler struct {
-	TemplateFS      fs.FS
-	SessionManager  *scs.SessionManager
-	Log             *slog.Logger
-	NotFoundHandler http.Handler
-	ShelterGetter   interface {
+	PageTemplateRenderer PageTemplateRenderer
+	SessionManager       *scs.SessionManager
+	Log                  *slog.Logger
+	NotFoundHandler      http.Handler
+	ShelterGetter        interface {
 		GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error)
 	}
-	ShelterRoleGetter
+	ShelterRoleGetter ShelterRoleGetter
+}
 
-	shelterByIDTemplateCache *template.Template
+type ShelterRoleGetter interface {
+	GetShelterRoleByID(ctx context.Context, shelterID, userID string) (ShelterRole, error)
 }
 
 func (s *ShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	shelterID := r.PathValue("id")
 	flash, _ := PopSessionFlash(s.SessionManager, r.Context())
-	loginSession, _ := GetSessionUser(s.SessionManager, r.Context())
+	sessionUser, _ := GetSessionUser(s.SessionManager, r.Context())
 
 	shelter, err := s.ShelterGetter.GetShelterByID(r.Context(), shelterID)
 	if err != nil {
@@ -313,9 +298,9 @@ func (s *ShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var role ShelterRole
-	if loginSession != nil {
+	if sessionUser != nil {
 		var err error
-		role, err = s.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelterID, loginSession.UserID)
+		role, err = s.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelterID, sessionUser.UserID)
 		if err != nil {
 			s.Log.Error("Unexpected error while getting shelter role.", "reason", err.Error())
 			flash = &Flash{
@@ -325,20 +310,15 @@ func (s *ShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if s.shelterByIDTemplateCache == nil {
-		var err error
-		s.shelterByIDTemplateCache, err = template.ParseFS(s.TemplateFS, "base.html", "shelter_by_id.html")
-		if err != nil {
-			panic("unable to parse shelter by id template: " + err.Error())
-		}
-	}
-	err = ExecuteTemplate(s.shelterByIDTemplateCache, w, "base.html", ShelterByIDTemplateData{
-		LoginSession: loginSession,
-		Flash:        flash,
-		Role:         role,
-		Shelter:      shelter,
+	err = s.PageTemplateRenderer.RenderPageTemplate(w, "shelter_by_id.html", ShelterByIDPage{
+		BasePage: BasePage{
+			SessionUser: sessionUser,
+		},
+		Flash:   flash,
+		Role:    role,
+		Shelter: shelter,
 	})
 	if err != nil {
-		panic("unable to execute shelter by id template: " + err.Error())
+		panic(err)
 	}
 }

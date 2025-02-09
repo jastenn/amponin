@@ -1,6 +1,9 @@
 package main
 
-import "net/mail"
+import (
+	"net/mail"
+	"time"
+)
 
 type FieldValidation struct {
 	FieldErrors map[string]string
@@ -33,11 +36,18 @@ func (f *FieldValidation) Add(key, message string) {
 	f.FieldErrors[key] = message
 }
 
-func InvalidEmail(email string) bool {
+func IsInvalidEmail(email string) bool {
 	_, err := mail.ParseAddress(email)
-	if err != nil || len(email) > 254 {
-		return true
-	}
 
-	return false
+	return err != nil || len(email) > 254
+}
+
+func IsInvalidCoordinates(s string) bool {
+	_, err := ParseCoordinates(s)
+	return err != nil
+}
+
+func IsInvalidDate(s string) bool {
+	_, err := time.Parse(time.DateOnly, s)
+	return err != nil
 }

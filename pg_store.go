@@ -438,7 +438,7 @@ func (p *PGStore) FindPetByLocation(ctx context.Context, location *Coordinates, 
 	return results, nil
 }
 
-func (p *PGStore) CreateEmailChangeRequest(ctx context.Context, data NewEmailChangeRequest) (*EmailChangeRequest, error) {
+func (p *PGStore) CreateEmailUpdateRequest(ctx context.Context, data NewEmailUpdateRequest) (*EmailUpdateRequest, error) {
 	row := p.db.QueryRowContext(ctx,
 		`INSERT INTO email_change_request (user_id, current_email, expires_at)
 		 VALUES ($1, $2, $3)
@@ -453,7 +453,7 @@ func (p *PGStore) CreateEmailChangeRequest(ctx context.Context, data NewEmailCha
 		data.UserID, data.CurrentEmail, data.ExpiresAt,
 	)
 
-	result := &EmailChangeRequest{}
+	result := &EmailUpdateRequest{}
 	err := row.Scan(&result.Code, &result.UserID, &result.CurrentEmail, &result.ExpiresAt, &result.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("unable to insert into email change request table: %w", err)
@@ -463,7 +463,7 @@ func (p *PGStore) CreateEmailChangeRequest(ctx context.Context, data NewEmailCha
 
 }
 
-func (p *PGStore) GetEmailChangeRequest(ctx context.Context, code string) (*EmailChangeRequest, error) {
+func (p *PGStore) GetEmailUpdateRequest(ctx context.Context, code string) (*EmailUpdateRequest, error) {
 	row := p.db.QueryRowContext(ctx,
 		`SELECT code, user_id, current_email, expires_at, created_at
 		 FROM email_change_request
@@ -471,11 +471,11 @@ func (p *PGStore) GetEmailChangeRequest(ctx context.Context, code string) (*Emai
 		code,
 	)
 
-	result := &EmailChangeRequest{}
+	result := &EmailUpdateRequest{}
 	err := row.Scan(&result.Code, &result.UserID, &result.CurrentEmail, &result.ExpiresAt, &result.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNoEmailChangeRequest
+			return nil, ErrNoEmailUpdateRequest
 		}
 		return nil, fmt.Errorf("unable to query for email_change_request using user_id: %w", err)
 	}
@@ -483,7 +483,7 @@ func (p *PGStore) GetEmailChangeRequest(ctx context.Context, code string) (*Emai
 	return result, nil
 }
 
-func (p *PGStore) RemoveEmailChangeRequest(ctx context.Context, code string) (*EmailChangeRequest, error) {
+func (p *PGStore) RemoveEmailUpdateRequest(ctx context.Context, code string) (*EmailUpdateRequest, error) {
 	row := p.db.QueryRowContext(ctx,
 		`DELETE FROM email_change_request
 		 WHERE code = $1
@@ -492,7 +492,7 @@ func (p *PGStore) RemoveEmailChangeRequest(ctx context.Context, code string) (*E
 		code,
 	)
 
-	result := &EmailChangeRequest{}
+	result := &EmailUpdateRequest{}
 	err := row.Scan(&result.Code, &result.UserID, &result.CurrentEmail, &result.ExpiresAt, &result.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("unable to delete from email_change_request table: %w", err)

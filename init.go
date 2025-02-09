@@ -6,5 +6,5 @@ func init() {
 	gob.Register(&Flash{})
 	gob.Register(&SessionUser{})
 	gob.Register(&SessionSignupValues{})
-	gob.Register(&SessionChangeEmail{})
+	gob.Register(&SessionEmailUpdate{})
 }

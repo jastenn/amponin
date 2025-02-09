@@ -31,15 +31,15 @@
 						<div>
 							<label class="form-label">Avatar</label>
 							<input type="file" name="avatar">
-							{{ with .GeneralUpdateErrors.Avatar }}
+							{{ with index .GeneralUpdateForm.FieldErrors `avatar` }}
 								<small class="form-helper form-helper--error">{{ . }}</small>
 							{{ end }}
 						</div>
 						<div>
 							<label for="display-name" class="form-label">Display Name</label>	
-							<input id="display-name" type="text" name="display-name" value="{{ .GeneralUpdateValues.DisplayName }}"
+							<input id="display-name" type="text" name="display-name" value="{{ .GeneralUpdateForm.DisplayName }}"
 								class="form-control">
-							{{ with .GeneralUpdateErrors.DisplayName }}
+							{{ with index .GeneralUpdateForm.FieldErrors `display-name` }}
 								<small class="form-helper form-helper--error">{{ . }}</small>
 							{{ end }}
 						</div>
@@ -92,29 +92,29 @@
 					{{ end }}
 				</div>
 				{{ if eq .Focus `password` }}
-					<form target="/account" method="post" class="account__item-content">
+					<form action="/account?focus=password" method="post" class="account__item-content">
 						<input type="hidden" name="action" value="password-update">
 						<div>
 							<label for="current-password" class="form-label">Current Password</label>	
-							<input id="current-password" type="password" name="current-password" value="{{ .PasswordUpdateValues.CurrentPassword }}"
+							<input id="current-password" type="password" name="current-password" value="{{ .PasswordUpdateForm.CurrentPassword }}"
 								class="form-control">
-							{{ with .PasswordUpdateErrors.CurrentPassword }}
+							{{ with index .PasswordUpdateForm.FieldErrors `current-password` }}
 								<small class="form-helper form-helper--error">{{ . }}</small>
 							{{ end }}
 						</div>
 						<div>
 							<label for="new-password" class="form-label">New Password</label>	
-							<input id="new-password" type="password" name="new-password" value="{{ .PasswordUpdateValues.NewPassword }}"
+							<input id="new-password" type="password" name="new-password" value="{{ .PasswordUpdateForm.NewPassword }}"
 								class="form-control">
-							{{ with .PasswordUpdateErrors.NewPassword }}
+							{{ with index .PasswordUpdateForm.FieldErrors `new-password` }}
 								<small class="form-helper form-helper--error">{{ . }}</small>
 							{{ end }}
 						</div>
 						<div>
 							<label for="confirm-password" class="form-label">Confirm Password</label>	
-							<input id="confirm-password" type="password" name="confirm-password" value="{{ .PasswordUpdateValues.ConfirmPassword }}"
+							<input id="confirm-password" type="password" name="confirm-password" value="{{ .PasswordUpdateForm.ConfirmPassword }}"
 								class="form-control">
-							{{ with .PasswordUpdateErrors.ConfirmPassword }}
+							{{ with index .PasswordUpdateForm.FieldErrors `confirm-password`  }} 
 								<small class="form-helper form-helper--error">{{ . }}</small>
 							{{ end }}
 						</div>

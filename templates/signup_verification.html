@@ -5,16 +5,16 @@
 {{ define "content" }}
 <main>
 	<div class="card container-xs">
-		<h1 id="signup-heading" class="sr-only">Signup Completion</h1>
+		<h1 id="signup-verification" class="sr-only">Signup Verification</h1>
 		<p class="card__heading card__heading--sm card__heading--semibold">We sent a verification code to {{ .Email }}</p>
-		<form action="/signup/completion" method="post" class="gap" aria-label="signup-completion">
+		<form action="/signup/verification" method="post" class="gap" aria-label="signup-verification">
 			<div>
 				<label for="code" class="form-label">Verification Code</label>	
 				<input id="code" type="text" name="code"
-					value="{{ .Code }}"
+					value="{{ .VerificationCode }}"
 					class="form-control"
 					aria-describedby="code-error">
-				{{ with .CodeError }}
+				{{ with .VerificationCodeError }}
 					<small id="code-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>

@@ -9,8 +9,8 @@ import (
 )
 
 type IndexTemplateData struct {
-	LoginSession *SessionUser
-	Flash        *Flash
+	BasePage
+	Flash *Flash
 }
 
 type IndexHandler struct {
@@ -38,8 +38,10 @@ func (i *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	err := ExecuteTemplate(i.indexTemplateCache, w, "base.html", IndexTemplateData{
-		LoginSession: sessionUser,
-		Flash:        flash,
+		BasePage: BasePage{
+			SessionUser: sessionUser,
+		},
+		Flash: flash,
 	})
 	if err != nil {
 		panic("unable to execute index template: " + err.Error())

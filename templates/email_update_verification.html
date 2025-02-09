@@ -7,7 +7,7 @@
 	<div class="card container-xs">
 		<h1 id="verification-heading" class="sr-only">Change Email Verification</h1>
 		<p class="card__heading card__heading--sm card__heading--semibold">We sent a verification code to {{ .NewEmail }}</p>
-		<form action="/account/change-email/verification" method="post" class="gap" aria-label="verification-heading">
+		<form action="/account/email-update/verification" method="post" class="gap" aria-label="verification-heading">
 			<div>
 				<label for="code" class="form-label">Verification Code</label>	
 				<input id="code" type="text" name="verification-code"

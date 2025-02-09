@@ -20,40 +20,40 @@
 			<div>
 				<label for="display-name" class="form-label">Display Name</label>	
 				<input id="display-name" type="text" name="display-name"
-					value="{{ .Values.DisplayName }}"
+					value="{{ .Form.DisplayName }}"
 					class="form-control"
 					aria-describedby="display-name-error">
-				{{ with .Errors.DisplayName }}
+				{{ with index .Form.FieldErrors `display-name` }}
 					<small id="display-name-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
 			<div>
 				<label for="email" class="form-label">Email</label>	
 				<input id="email" type="text" name="email"
-					value="{{ .Values.Email }}"
+					value="{{ .Form.Email }}"
 					class="form-control"
 					aria-describedby="email-error">
-				{{ with .Errors.Email }}
+				{{ with index .Form.FieldErrors `email` }}
 					<small id="email-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
 			<div>
 				<label for="password" class="form-label">Password</label>	
 				<input id="password" type="password" name="password"
-					value="{{ .Values.Password }}"
+					value="{{ .Form.Password }}"
 					class="form-control"
 					aria-describedby="password-error">
-				{{ with .Errors.Password }}
+				{{ with index .Form.FieldErrors `password` }}
 					<small id="password-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
 			<div>
 				<label for="confirm-password" class="form-label">Confirm Password</label>	
 				<input id="confirm-password" type="password" name="confirm-password"
-					value="{{ .Values.ConfirmPassword }}"
+					value="{{ .Form.ConfirmPassword }}"
 					class="form-control"
 					aria-describedby="confirm-password-error">
-				{{ with .Errors.ConfirmPassword }}
+				{{ with index .Form.FieldErrors `confirm-password` }}
 					<small id="confirm-password-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>

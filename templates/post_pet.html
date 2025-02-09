@@ -18,50 +18,58 @@
 	<form class="gap" action="/shelter/{{.ShelterID}}/post-pet" method="post" enctype="multipart/form-data">
 		<div>
 			<label class="form-label">Name</label>
-			<input type="text" name="name" value="{{ .Values.Name }}"
+			<input type="text" name="name" value="{{ .Form.Name }}"
 				class="form-control">
-			{{ with .Errors.Name }} <small class="form-helper form-helper--error"> {{ . }} </small> {{ end }}
+			{{ with index .Form.FieldErrors `name` }}
+				<small class="form-helper form-helper--error"> {{ . }} </small> 
+			{{ end }}
 		</div>
 		<div>
 			<label for="gender" class="form-label">Gender</label>
 			<select id="gender" name="gender" class="form-control">
-				<option value="" disabled {{ if eq .Values.Gender `` }} selected {{ end }}>Select Pet's Gender</option>	
-				<option value="male" {{ if eq .Values.Gender `male` }} selected {{ end }}>Male</option>	
-				<option value="female" {{ if eq .Values.Gender `female` }} selected {{ end }}>Female</option>	
+				<option value="" disabled {{ if eq .Form.Gender `` }} selected {{ end }}>Select Pet's Gender</option>	
+				<option value="male" {{ if eq .Form.Gender `male` }} selected {{ end }}>Male</option>	
+				<option value="female" {{ if eq .Form.Gender `female` }} selected {{ end }}>Female</option>	
 			</select>
-			{{ with .Errors.Gender }} <small class="form-helper form-helper--error"> {{ . }} </small> {{ end }}
+			{{ with index .Form.FieldErrors `gender` }} 
+				<small class="form-helper form-helper--error"> {{ . }} </small>
+			{{ end }}
 		</div>
 		<div>
 			<label for="type" class="form-label">Type</label>
 			<select id="type" name="type" class="form-control">
-				<option value="" disabled {{ if eq .Values.Type `` }} selected {{ end }}>Select Pet's Type</option>	
-				<option value="cat" {{ if eq .Values.Type `cat` }} selected {{ end }}>Cat</option>	
-				<option value="dog" {{ if eq .Values.Type `dog` }} selected {{ end }}>Dog</option>	
+				<option value="" disabled {{ if eq .Form.Type `` }} selected {{ end }}>Select Pet's Type</option>	
+				<option value="cat" {{ if eq .Form.Type `cat` }} selected {{ end }}>Cat</option>	
+				<option value="dog" {{ if eq .Form.Type `dog` }} selected {{ end }}>Dog</option>	
 			</select>
-			{{ with .Errors.Type }} <small class="form-helper form-helper--error"> {{ . }} </small> {{ end }}
+			{{ with index .Form.FieldErrors `type` }}
+				<small class="form-helper form-helper--error"> {{ . }} </small>
+			{{ end }}
 		</div>
 		<div>
 			<label class="form-label">Birth Date</label>
-			<input type="date" name="birth-date" value="{{ .Values.BirthDate }}"
+			<input type="date" name="birth-date" value="{{ .Form.BirthDate }}"
 				class="form-control">
 			<div>
-				<input id="is-birth-date-approx" type="checkbox" name="is-birth-date-approx" {{ if eq .Values.IsBirthDateApprox `true` }} checked {{ end }} value="true">
+				<input id="is-birth-date-approx" type="checkbox" name="is-birth-date-approx" {{ if eq .Form.IsBirthDateApprox `true` }} checked {{ end }} value="true">
 				<label for="is-birth-date-approx">Approx.</label>
 			</div>
-			{{ with .Errors.BirthDate }} <small class="form-helper form-helper--error"> {{ . }} </small> {{ end }}
+			{{ with index .Form.FieldErrors `birth-date` }}
+				<small class="form-helper form-helper--error"> {{ . }} </small>
+			{{ end }}
 
 		</div>
 		<div>
 			<label for="description" class="form-label">Description</label>	
-			<textarea id="description" name="description" class="form-control">{{- .Values.Description -}}</textarea>
-			{{ with .Errors.Description }}
+			<textarea id="description" name="description" class="form-control">{{- .Form.Description -}}</textarea>
+			{{ with index .Form.FieldErrors `description` }}
 				<small id="description-error" class="form-helper form-helper--error">{{ . }}</small>
 			{{ end }}
 		</div>
 		<div>
 			<label for="images" class="form-label">Images</label>	
 			<input id="images" name="images" type="file" multiple accept="image/*" class="form-control">
-			{{ with .Errors.Images }}
+			{{ with index .Form.FieldErrors `images` }}
 				<small id="images-error" class="form-helper form-helper--error">{{ . }}</small>
 			{{ end }}
 		</div>

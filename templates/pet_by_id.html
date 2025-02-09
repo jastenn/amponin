@@ -16,7 +16,6 @@
 <div class="container">
 	<div class="pet-heading">
 		<div class="pet-images">
-			<!-- Slider main container -->
 			<div id="pet-images-carousel" class="pet-images__carousel">
 				<div class="swiper-wrapper">
 					{{ range .Pet.ImageURLs }}
@@ -55,7 +54,7 @@
 				{{ end }}
 				<h1>{{ .Pet.Name }}</h1>	
 			</div>
-			<p class="pet-info__age">{{ if .Pet.IsBirthDateApprox -}} Approx. {{ end -}} {{ calc_age .Pet.BirthDate }}</p>
+			<p class="pet-info__age">{{ if .Pet.IsBirthDateApprox -}} Approx. {{ end -}} {{ calculate_age .Pet.BirthDate }}</p>
 			<div>
 				<a href="/shelter/{{ .Shelter.ID }}" class="pet-info__shelter-name">{{ .Shelter.Name }}</a>
 				<div class="pet-info__shelter-address">{{ .Shelter.Address }}</div>

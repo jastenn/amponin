@@ -15,6 +15,10 @@ import (
 
 var ErrFileExists = errors.New("file already exists.")
 
+type FileStore interface {
+	Save(dir string, file io.Reader) (url string, err error)
+}
+
 type LocalFileStore struct {
 	BaseDir string
 }
@@ -45,5 +49,5 @@ func (l *LocalFileStore) Save(filename string, file io.Reader) (url string, err 
 		return "", fmt.Errorf("failed to save file: unable to write file: %w", err)
 	}
 
-	return "/"+finalPath, nil
+	return "/" + finalPath, nil
 }

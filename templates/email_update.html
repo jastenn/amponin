@@ -5,8 +5,8 @@
 {{ define "content" }}
 <main>
 	<div class="card container-xs">
-		<h1 id="account-email-change-heading" class="card__heading mx-auto">Change Account Email</h1>
-		<form action="/account/change-email?request-code={{ .RequestCode }}" method="post" class="gap" aria-labelledby="account-email-change-heading">
+		<h1 id="account-email-update-heading" class="card__heading mx-auto">Update Account Email</h1>
+		<form action="/account/email-update?request-code={{ .RequestCode }}" method="post" class="gap" aria-labelledby="account-email-update-heading">
 			<div>
 				<label for="new-email" class="form-label">New Email</label>	
 				<input id="new-email" type="text" name="new-email"
