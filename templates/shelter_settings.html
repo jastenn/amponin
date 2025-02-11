@@ -1,0 +1,59 @@
+{{ define "head" }}
+	<title>Shelter Settings - Amponin</title>
+	<link rel="stylesheet" href="/public/styles/pages/shelter-settings.css">
+{{ end }}
+
+{{ define "content" }}
+<main>
+	<div class="card container-sm">
+		<hgroup class="card__hgroup">
+			<h1 class="card__heading">Shelter Settings</h1>
+			<p class="card__subheading">{{ .ShelterName }}</p>
+		</hgroup>
+		{{ with .Flash }}
+			<div class="card__flash
+				{{- if eq .Level `flash_error` }} card__flash--error
+				{{- else if eq .Level `flash_warn` }} card__flash--warn
+				{{- else if eq .Level `flash_success` }} card__flash--success
+				{{- end -}}
+			">
+				{{ .Message }}					
+			</div>
+		{{ end }}
+
+		<div class="settings-item">
+			<div>
+				<h2 class="settings-item__heading">Update Information</h2>
+				<p class="settings-item__description">Update shelter information and visibility.</p>
+			</div>
+			<a href="/shelter/{{ .ShelterID }}/update" class="button">Update</a>	
+		</div>
+		{{ if or (eq .Role `super_admin`) (eq .Role `admin`) }}
+		<div class="settings-item">
+			<div>
+				<h2 class="settings-item__heading">Manage Roles</h2>
+				<p class="settings-item__description">Add, remove and promote user's role for this shelter.</p>
+			</div>
+			<a href="#" class="button">Manage</a>	
+		</div>
+		{{ end }}
+
+		{{ if eq  .Role `super_admin` }}
+		<div class="settings-item">
+			<div>
+				<h2 class="settings-item__heading">Transfer Ownership</h2>
+				<p class="settings-item__description">Transfer ownership of this shelter to other user.</p>
+			</div>
+			<a href="#" class="button">Transfer</a>	
+		</div>
+		<div class="settings-item">
+			<div>
+				<h2 class="settings-item__heading">Delete this shelter</h2>
+				<p class="settings-item__description">Delete this shelter forever.</p>
+			</div>
+			<a href="#" class="button">Delete</a>	
+		</div>
+		{{ end }}
+	</div>
+</main>
+{{ end }}

@@ -205,6 +205,14 @@ location-input {
 	padding: 0;
 }
 
+.card__hgroup {
+	margin-bottom: 1rem;
+}
+
+.card__hgroup .card__heading {
+	margin-bottom: 0;
+}
+
 .card__heading {
 	display: block;
 	font-size: 1.75rem;

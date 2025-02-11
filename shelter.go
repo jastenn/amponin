@@ -14,11 +14,6 @@ import (
 	"github.com/alexedwards/scs/v2"
 )
 
-var (
-	ErrNoShelter     = errors.New("no shelter found")
-	ErrNoShelterRole = errors.New("no shelter role found")
-)
-
 type ShelterRole string
 
 const (
@@ -271,14 +266,8 @@ type ShelterByIDHandler struct {
 	SessionManager       *scs.SessionManager
 	Log                  *slog.Logger
 	NotFoundHandler      http.Handler
-	ShelterGetter        interface {
-		GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error)
-	}
-	ShelterRoleGetter ShelterRoleGetter
-}
-
-type ShelterRoleGetter interface {
-	GetShelterRoleByID(ctx context.Context, shelterID, userID string) (ShelterRole, error)
+	ShelterGetter        ShelterGetter
+	ShelterRoleGetter    ShelterRoleGetter
 }
 
 func (s *ShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -321,4 +310,99 @@ func (s *ShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+type ShelterSettingsHandler struct {
+	PageTemplateRenderer PageTemplateRenderer
+	Log                  *slog.Logger
+	SessionManager       *scs.SessionManager
+	NotFoundHandler      http.Handler
+	ShelterGetter        ShelterGetter
+	ShelterRoleGetter    ShelterRoleGetter
+	LoginRedirectURL     string
+	ErrorRedirectURL     string
+}
+
+func (s *ShelterSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("shelter_id")
+	if id == "" {
+		s.Log.Debug("No shelter_id path value was provided to handler")
+		s.NotFoundHandler.ServeHTTP(w, r)
+		return
+	}
+
+	sessionUser, _ := GetSessionUser(s.SessionManager, r.Context())
+	if sessionUser == nil {
+		s.Log.Debug("User is not logged in.")
+		flash := NewFlash("Please login first.", FlashLevelError)
+		s.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
+		url := strings.ReplaceAll(s.LoginRedirectURL, "{shelter_id}", id)
+		http.Redirect(w, r, url, http.StatusSeeOther)
+		return
+	}
+
+	shelter, err := s.ShelterGetter.GetShelterByID(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNoShelter) {
+			s.Log.Debug("No shelter was found with the given id.", "id", id)
+			s.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+
+		s.Log.Error("Unexpected error while getting shelter by id.", "reason", err.Error())
+		flash := NewFlash("Something went wrong. Please try again later.", FlashLevelError)
+		s.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
+		url := strings.ReplaceAll(s.ErrorRedirectURL, "{shelter_id}", id)
+		http.Redirect(w, r, url, http.StatusSeeOther)
+		return
+	}
+
+	role, err := s.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelter.ID, sessionUser.UserID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelterRole) {
+			s.Log.Debug("User has no role for this shelter.")
+			BasicHTTPError(w, http.StatusUnauthorized)
+			return
+		}
+
+		s.Log.Error("Unexpected error while getting shelter role by id.", "reason", err.Error())
+		flash := NewFlash("Something went wrong. Please try again later.", FlashLevelError)
+		s.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
+		url := strings.ReplaceAll(s.ErrorRedirectURL, "{shelter_id}", id)
+		http.Redirect(w, r, url, http.StatusSeeOther)
+		return
+	}
+
+	err = s.PageTemplateRenderer.RenderPageTemplate(w, "shelter_settings.html", ShelterSettingsPage{
+		BasePage: BasePage{
+			SessionUser: sessionUser,
+		},
+		Role:        role,
+		ShelterID:   shelter.ID,
+		ShelterName: shelter.Name,
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+type ShelterSettingsPage struct {
+	BasePage
+
+	Flash       *Flash
+	Role        ShelterRole
+	ShelterID   string
+	ShelterName string
+}
+
+var ErrNoShelter = errors.New("no shelter found")
+
+type ShelterGetter interface {
+	GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error)
+}
+
+var ErrNoShelterRole = errors.New("no shelter role found")
+
+type ShelterRoleGetter interface {
+	GetShelterRoleByID(ctx context.Context, shelterID, userID string) (ShelterRole, error)
 }

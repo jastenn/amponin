@@ -174,7 +174,7 @@ func main() {
 		PageTemplateRenderer:       pageTemplateRenderer,
 		MailRenderer:               mailTemplateRenderer,
 		Log:                        log.With("path", "POST /account"),
-		SessionManager:               sessionManager,
+		SessionManager:             sessionManager,
 		UserStore:                  postgresDataStore,
 		FileStore:                  fileStore,
 		UnauthenticatedRedirectURL: "/login?callback=%2Faccount",
@@ -258,6 +258,16 @@ func main() {
 		FileStore:            fileStore,
 		PetRegistry:          postgresDataStore,
 		SuccessRedirectURL:   "/{pet_id}",
+	})
+	handler.Handle("GET /shelter/{shelter_id}/settings", &ShelterSettingsHandler{
+		Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
+		PageTemplateRenderer: pageTemplateRenderer,
+		SessionManager:       sessionManager,
+		ShelterRoleGetter:    postgresDataStore,
+		ShelterGetter:        postgresDataStore,
+		ErrorRedirectURL:     "/shelter/{shelter_id}",
+		LoginRedirectURL:     "/login?callback=%2Fshelter%2F{shelter_id}%2Fsettings",
+		NotFoundHandler:      http.NotFoundHandler(),
 	})
 	handler.Handle("GET /pets", &PetsHandler{
 		Log:                  log.With("path", "GET /pets"),

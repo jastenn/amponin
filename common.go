@@ -151,3 +151,7 @@ func IsImage(b []byte) bool {
 	xfileType := strings.Split(mimetype, "/")
 	return xfileType[0] == "image"
 }
+
+func BasicHTTPError(w http.ResponseWriter, status int) {
+	http.Error(w, http.StatusText(status), status)
+}

@@ -1,0 +1,19 @@
+.settings-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+}
+
+.settings-item + .settings-item {
+	margin-top: .5rem;
+}
+
+.settings-item__heading {
+	font-size: 1.125rem;
+	font-weight: 600;
+}
+
+.settings-item .button {
+	min-width: 9rem;
+}
