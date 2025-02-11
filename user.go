@@ -652,8 +652,8 @@ func (d *DoAccountHandler) HandleGeneralUpdate(w http.ResponseWriter, r *http.Re
 	} else if errors.Is(err, ErrUnexpectedFileType) {
 		fieldValidation.Add("avatar", "Only supports image types.")
 
-	} else if err != nil && !errors.Is(err, http.ErrMissingFile) {
-		d.Log.Error("Unexpected error while parsing avatar.", err.Error())
+	} else if !errors.Is(err, http.ErrMissingFile) {
+		d.Log.Error("Unexpected error while parsing avatar.", "reason", err.Error())
 		fieldValidation.Add("avatar", "Unexpected error while uploading file. Please try again later.")
 	}
 

@@ -16,7 +16,7 @@ import (
 var ErrFileExists = errors.New("file already exists.")
 
 type FileStore interface {
-	Save(dir string, file io.Reader) (url string, err error)
+	Save(filepath string, file io.Reader) (url string, err error)
 }
 
 type LocalFileStore struct {

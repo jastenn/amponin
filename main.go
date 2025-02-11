@@ -263,11 +263,34 @@ func main() {
 		Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
+		NotFoundHandler:      http.NotFoundHandler(),
 		ShelterRoleGetter:    postgresDataStore,
 		ShelterGetter:        postgresDataStore,
 		ErrorRedirectURL:     "/shelter/{shelter_id}",
 		LoginRedirectURL:     "/login?callback=%2Fshelter%2F{shelter_id}%2Fsettings",
+	})
+	handler.Handle("GET /shelter/{shelter_id}/update", &ShelterUpdateHandler{
+		Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
+		PageTemplateRenderer: pageTemplateRenderer,
+		SessionManager:       sessionManager,
 		NotFoundHandler:      http.NotFoundHandler(),
+		ShelterRoleGetter:    postgresDataStore,
+		ShelterGetter:        postgresDataStore,
+		ErrorRedirectURL:     "/shelter/{shelter_id}",
+		LoginRedirectURL:     "/login?callback=%2Fshelter%2F{shelter_id}%2Fsettings",
+	})
+	handler.Handle("POST /shelter/{shelter_id}/update", &DoShelterUpdateHandler{
+		Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
+		PageTemplateRenderer: pageTemplateRenderer,
+		SessionManager:       sessionManager,
+		NotFoundHandler:      http.NotFoundHandler(),
+		ShelterRoleGetter:    postgresDataStore,
+		ShelterGetter:        postgresDataStore,
+		ShelterUpdater:       postgresDataStore,
+		FileStore:            fileStore,
+		SuccessRedirectURL:   "/shelter/{shelter_id}",
+		ErrorRedirectURL:     "/shelter/{shelter_id}",
+		LoginRedirectURL:     "/login?callback=%2Fshelter%2F{shelter_id}%2Fsettings",
 	})
 	handler.Handle("GET /pets", &PetsHandler{
 		Log:                  log.With("path", "GET /pets"),

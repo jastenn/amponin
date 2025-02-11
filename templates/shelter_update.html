@@ -1,0 +1,69 @@
+{{ define "head" }}
+	<title>Shelter Registration - Amponin</title>
+
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+		crossorigin=""/>
+	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+		integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+		crossorigin=""></script>
+	<script src="/public/scripts/components/location-input.js" defer></script>
+{{ end }}
+
+{{ define "content" }}
+<main>
+	<div class="card container-sm">
+		<div class="card__hgroup">
+			<h1 id="shelter-update-heading" class="card__heading">Shelter Update</h1>
+			<p class="card__subheading">{{ .ShelterName }}</p>
+		</div>
+		{{ with .Flash }}
+		<div class="card__flash
+				{{- if eq .Level `flash_error` }} card__flash--error
+				{{- else if eq .Level `flash_warn` }} card__flash--warn
+				{{- else if eq .Level `flash_success` }} card__flash--success
+				{{- end -}}
+			">
+				{{ .Message }}					
+			</div>
+		{{ end }}
+		<form action="/shelter/{{ .ShelterID }}/update" method="post" class="gap" aria-labelledby="shelter-update-heading" enctype="multipart/form-data">
+			<div>
+				<label for="avatar" class="form-label">Avatar</label>	
+				<input id="avatar" type="file" accept="images/*" name="avatar"
+					class="form-control"
+					aria-describedby="avatar-error">
+				{{ with index .Form.FieldErrors `avatar` }}
+					<small id="avatar-error" class="form-helper form-helper--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<div>
+				<label for="name" class="form-label">Name</label>	
+				<input id="name" type="text" name="name"
+					value="{{ .Form.Name }}"
+					class="form-control"
+					aria-describedby="name-error">
+				{{ with index .Form.FieldErrors `name` }}
+					<small id="name-error" class="form-helper form-helper--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<fieldset aria-describedby="location-error" class="gap">
+				<legend class="form-label">Location</legend>	
+				<location-input name="coordinates" value="{{ .Form.Coordinates }}" class="form-control"></location-input>
+				<input name="address" value="{{ .Form.Address }}" type="text" class="form-control">
+				{{ with index .Form.FieldErrors `location` }}
+					<small id="location-error" class="form-helper form-helper--error">{{ . }}</small>
+				{{ end }}
+			</fieldset>
+			<div>
+				<label for="description" class="form-label">Description</label>	
+				<textarea id="description" name="description" class="form-control">{{- .Form.Description -}}</textarea>
+				{{ with index .Form.FieldErrors `description` }}
+					<small id="description-error" class="form-helper form-helper--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<button type="submit" class="button">Submit</button>
+		</form>
+	</div>
+</main>
+{{ end }}

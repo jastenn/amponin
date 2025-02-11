@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -27,7 +30,7 @@ type Shelter struct {
 	Name        string
 	AvatarURL   *string
 	Address     string
-	Coordinates *Coordinates
+	Coordinates Coordinates
 	Description string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -36,6 +39,10 @@ type Shelter struct {
 type Coordinates struct {
 	Longitude float64
 	Latitude  float64
+}
+
+func (c Coordinates) String() string {
+	return fmt.Sprintf("%v,%v", c.Latitude, c.Longitude)
 }
 
 func ParseCoordinates(s string) (*Coordinates, error) {
@@ -393,6 +400,273 @@ type ShelterSettingsPage struct {
 	Role        ShelterRole
 	ShelterID   string
 	ShelterName string
+}
+
+type ShelterUpdateHandler struct {
+	Log                  *slog.Logger
+	PageTemplateRenderer PageTemplateRenderer
+	SessionManager       *scs.SessionManager
+	NotFoundHandler      http.Handler
+	ShelterGetter        ShelterGetter
+	ShelterRoleGetter    ShelterRoleGetter
+	LoginRedirectURL     string
+	ErrorRedirectURL     string
+}
+
+func (s *ShelterUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	allowedRoles := []ShelterRole{ShelterRoleAdmin, ShelterRoleSuperAdmin, ShelterRoleEditor}
+
+	shelterID := r.PathValue("shelter_id")
+	sessionUser, _ := GetSessionUser(s.SessionManager, r.Context())
+	if sessionUser == nil {
+		redirectURL := strings.ReplaceAll(s.LoginRedirectURL, "{shelter_id}", shelterID)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
+
+	role, err := s.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelterID, sessionUser.UserID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelterRole) {
+			s.Log.Debug(
+				"No shelter role was found associated with this user.",
+				"user_id", sessionUser.UserID,
+				"shelter_id", shelterID,
+			)
+			s.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+
+		s.Log.Error(
+			"Unexpected error while getting shelter role associated to user.",
+			"user_id", sessionUser.UserID,
+			"shelter_id", shelterID,
+		)
+		http.Redirect(w, r, s.ErrorRedirectURL, http.StatusSeeOther)
+		return
+	}
+
+	if !slices.Contains(allowedRoles, role) {
+		s.Log.Debug("User's role is not allowed to take this action", "role", role)
+		BasicHTTPError(w, http.StatusUnauthorized)
+		return
+	}
+
+	shelter, err := s.ShelterGetter.GetShelterByID(r.Context(), shelterID)
+	if err != nil {
+		s.Log.Error(
+			"Unexpected error while shelter with id.",
+			"shelter_id", shelterID,
+		)
+		http.Redirect(w, r, s.ErrorRedirectURL, http.StatusSeeOther)
+		return
+	}
+
+	flash, _ := PopSessionFlash(s.SessionManager, r.Context())
+	err = s.PageTemplateRenderer.RenderPageTemplate(
+		w,
+		"shelter_update.html",
+		ShelterUpdatePage{
+			BasePage: BasePage{
+				SessionUser: sessionUser,
+			},
+			Flash:       flash,
+			ShelterID:   shelter.ID,
+			ShelterName: shelter.Name,
+			Form: ShelterUpdateForm{
+				Name:            shelter.Name,
+				Coordinates:     shelter.Coordinates.String(),
+				Address:         shelter.Address,
+				Description:     shelter.Description,
+				FieldValidation: NewFieldValidation(),
+			},
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+}
+
+type DoShelterUpdateHandler struct {
+	Log                  *slog.Logger
+	PageTemplateRenderer PageTemplateRenderer
+	SessionManager       *scs.SessionManager
+	NotFoundHandler      http.Handler
+	FileStore            FileStore
+	ShelterRoleGetter    ShelterRoleGetter
+	ShelterGetter        ShelterGetter
+	ShelterUpdater       interface {
+		UpdateShelter(ctx context.Context, shelterID string, data ShelterUpdate) (*Shelter, error)
+	}
+	LoginRedirectURL   string
+	ErrorRedirectURL   string
+	SuccessRedirectURL string
+}
+
+type ShelterUpdate struct {
+	Avatar      *string
+	Name        *string
+	Coordinates *Coordinates
+	Address     *string
+	Description *string
+}
+
+func (d *DoShelterUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	allowedRoles := []ShelterRole{ShelterRoleAdmin, ShelterRoleSuperAdmin, ShelterRoleEditor}
+
+	shelterID := r.PathValue("shelter_id")
+	sessionUser, _ := GetSessionUser(d.SessionManager, r.Context())
+	if sessionUser == nil {
+		redirectURL := strings.ReplaceAll(d.LoginRedirectURL, "{shelter_id}", shelterID)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
+
+	role, err := d.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelterID, sessionUser.UserID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelterRole) {
+			d.Log.Debug(
+				"No shelter role was found associated with this user.",
+				"user_id", sessionUser.UserID,
+				"shelter_id", shelterID,
+			)
+			d.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+
+		d.Log.Error(
+			"Unexpected error while getting shelter role associated to user.",
+			"user_id", sessionUser.UserID,
+			"shelter_id", shelterID,
+		)
+		http.Redirect(w, r, d.ErrorRedirectURL, http.StatusSeeOther)
+		return
+	}
+
+	if !slices.Contains(allowedRoles, role) {
+		d.Log.Debug("User's role is not allowed to take this action", "role", role)
+		BasicHTTPError(w, http.StatusUnauthorized)
+		return
+	}
+
+	shelter, err := d.ShelterGetter.GetShelterByID(r.Context(), shelterID)
+	if err != nil {
+		d.Log.Error(
+			"Unexpected error while shelter with id.",
+			"shelter_id", shelterID,
+		)
+		http.Redirect(w, r, d.ErrorRedirectURL, http.StatusSeeOther)
+		return
+	}
+
+	var form ShelterUpdateForm
+	form.FieldValidation = NewFieldValidation()
+	if b, filename, err := FormImage(r, "avatar"); err != nil && !errors.Is(err, http.ErrMissingFile) {
+		form.Add("avatar", "Unexpected error while parsing this image.")
+	} else if !errors.Is(err, http.ErrMissingFile) {
+		form.Avatar = &FormImageResult{
+			Data:     b,
+			Filename: filename,
+		}
+	}
+	form.Name = r.FormValue("name")
+	form.Coordinates = r.FormValue("coordinates")
+	form.Address = r.FormValue("address")
+	form.Description = r.FormValue("description")
+
+	form.Check(form.Name == "", "name", "Please fill out this field.")
+	form.Check(len(form.Name) < 8, "name", "Value must be at least 8 characters long.")
+	form.Check(len(form.Name) > 50, "name", "Value must not exceed 50 characters long.")
+	form.Check(form.Address == "" || form.Coordinates == "", "location", "Please fill out this field")
+	form.Check(IsInvalidCoordinates(form.Coordinates), "location", "Coordinates is invalid.")
+	form.Check(len(form.Coordinates) < 8, "location", "Address is too short. Please include more information.")
+	form.Check(len(form.Coordinates) > 250, "location", "Address is too long. It must not exceed 250 characters long.")
+	form.Check(form.Description == "", "description", "Please fill out this field.")
+	form.Check(len(form.Description) < 250, "description", "Value is too short. It must be at least 250 characters long.")
+	form.Check(len(form.Description) > 2500, "description", "Value is too long. It must be not exceed 2,500 characters long.")
+
+	if !form.Valid() {
+		err := d.PageTemplateRenderer.RenderPageTemplate(w, "shelter_update.html", ShelterUpdatePage{
+			BasePage: BasePage{
+				SessionUser: sessionUser,
+			},
+			ShelterID:   shelter.ID,
+			ShelterName: shelter.Name,
+			Form:        form,
+		})
+		if err != nil {
+			panic(err)
+		}
+		return
+	}
+
+	var avatar *string
+	if form.Avatar != nil {
+		filepath := path.Join("shelters", shelter.ID, form.Avatar.Filename)
+		url, err := d.FileStore.Save(filepath, bytes.NewBuffer(form.Avatar.Data))
+		if err != nil {
+			form.Add("avatar", "Something went wrong while uploading this file.")
+			err := d.PageTemplateRenderer.RenderPageTemplate(w, "shelter_update.html", ShelterUpdatePage{
+				BasePage: BasePage{
+					SessionUser: sessionUser,
+				},
+				ShelterID:   shelter.ID,
+				ShelterName: shelter.Name,
+				Form:        form,
+			})
+			if err != nil {
+				panic(err)
+			}
+			return
+		}
+		avatar = &url
+	}
+	coordinates, _ := ParseCoordinates(form.Coordinates)
+	_, err = d.ShelterUpdater.UpdateShelter(r.Context(), shelterID, ShelterUpdate{
+		Avatar:      avatar,
+		Name:        &form.Name,
+		Coordinates: coordinates,
+		Address:     &form.Address,
+		Description: &form.Description,
+	})
+	if err != nil {
+		d.Log.Error("Unable to update shelter information", "reason", err.Error(), "shelter_id", shelterID, "user_id", sessionUser.UserID)
+		err := d.PageTemplateRenderer.RenderPageTemplate(w, "shelter_update.html", ShelterUpdatePage{
+			BasePage: BasePage{
+				SessionUser: sessionUser,
+			},
+			ShelterID:   shelter.ID,
+			ShelterName: shelter.Name,
+			Flash:       NewFlash("Something went wrong. Please try again later.", FlashLevelError),
+			Form:        form,
+		})
+		if err != nil {
+			panic(err)
+		}
+		return
+	}
+
+	d.Log.Debug("Successfully updated shelter information.", "shelter_id", shelterID, "user_id", sessionUser.UserID)
+	redirectURL := strings.ReplaceAll(d.SuccessRedirectURL, "{shelter_id}", shelterID)
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+}
+
+type ShelterUpdatePage struct {
+	BasePage
+
+	Flash       *Flash
+	ShelterID   string
+	ShelterName string
+	Form        ShelterUpdateForm
+}
+
+type ShelterUpdateForm struct {
+	Avatar      *FormImageResult
+	Name        string
+	Coordinates string
+	Address     string
+	Description string
+
+	*FieldValidation
 }
 
 var ErrNoShelter = errors.New("no shelter found")

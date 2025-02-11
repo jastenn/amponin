@@ -221,7 +221,7 @@ func (d *DoPetPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var imageURLs []string
 	for _, image := range form.Images {
-		filepath := path.Join("shelters", shelterID, image.Filename)
+		filepath := path.Join("shelters", shelterID, "pets", image.Filename)
 		url, err := d.FileStore.Save(filepath, bytes.NewBuffer(image.Data))
 		if err != nil {
 			form.Add("images", "Unable to upload images.")

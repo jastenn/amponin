@@ -287,11 +287,10 @@ func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelte
 	)
 
 	shelter := &Shelter{}
-	coordinates := &Coordinates{}
 	err := row.Scan(
 		&shelter.ID, &shelter.Name, &shelter.AvatarURL, &shelter.Address,
 		&shelter.Description, &shelter.CreatedAt, &shelter.UpdatedAt,
-		&coordinates.Longitude, &coordinates.Latitude,
+		&shelter.Coordinates.Longitude, &shelter.Coordinates.Latitude,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -300,7 +299,46 @@ func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelte
 		return nil, fmt.Errorf("unable to query shelter table: %w", err)
 	}
 
-	shelter.Coordinates = coordinates
+	return shelter, nil
+}
+
+func (p *PGStore) UpdateShelter(ctx context.Context, shelterID string, data ShelterUpdate) (*Shelter, error) {
+	var lat *float64
+	var lng *float64
+	if data.Coordinates != nil {
+		lng = &data.Coordinates.Longitude
+		lat = &data.Coordinates.Latitude
+	}
+	row := p.db.QueryRowContext(ctx,
+		`UPDATE shelters
+			SET avatar_url = COALESCE($2, avatar_url),
+			name = COALESCE($3, name),
+			coordinates = COALESCE(ST_MakePoint($4, $5), coordinates),
+			address = COALESCE($6, address),
+			description = COALESCE($7, description),
+			updated_at = now()
+		 WHERE shelter_id = $1
+		 RETURNING 
+			shelter_id, avatar_url, name, address,
+			description, created_at, updated_at,
+			ST_X(coordinates::geometry), ST_Y(coordinates::geometry)`,
+		shelterID, data.Avatar, data.Name, lng, lat,
+		data.Address, data.Description,
+	)
+
+	shelter := &Shelter{}
+	err := row.Scan(
+		&shelter.ID, &shelter.AvatarURL, &shelter.Name, &shelter.Address,
+		&shelter.Description, &shelter.CreatedAt, &shelter.UpdatedAt,
+		&shelter.Coordinates.Longitude, &shelter.Coordinates.Latitude,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoShelter
+		}
+
+		return nil, fmt.Errorf("failed to update shelter: %w", err)
+	}
 
 	return shelter, nil
 }
