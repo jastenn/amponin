@@ -360,6 +360,7 @@ type LocalAccountGetterByEmail interface {
 }
 
 func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	callbackURL := r.URL.Query().Get("callback")
 	loginForm := NewLoginForm(r)
 
 	loginForm.Check(loginForm.Email == "", "email", "Please fill out this field.")
@@ -377,16 +378,18 @@ func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, ErrNoLocalAccount) {
 			d.Log.Debug("No local account is associated with the email provided.", "email", loginForm.Email)
 			d.RenderPage(w, LoginPage{
-				Flash: NewFlash("Incorrect email or password.", FlashLevelError),
-				Form:  loginForm,
+				CallbackURL: callbackURL,
+				Flash:       NewFlash("Incorrect email or password.", FlashLevelError),
+				Form:        loginForm,
 			})
 			return
 		}
 
 		d.Log.Error("Unable to get local account.", "reason", err.Error())
 		d.RenderPage(w, LoginPage{
-			Flash: NewFlash("Something went wrong. Please try again later.", FlashLevelError),
-			Form:  loginForm,
+			CallbackURL: callbackURL,
+			Flash:       NewFlash("Something went wrong. Please try again later.", FlashLevelError),
+			Form:        loginForm,
 		})
 		return
 	}
@@ -395,8 +398,9 @@ func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		d.Log.Debug("Failed to login. Incorrect password", "email", loginForm.Email)
 		d.RenderPage(w, LoginPage{
-			Flash: NewFlash("Incorrect email or password.", FlashLevelError),
-			Form:  loginForm,
+			CallbackURL: callbackURL,
+			Flash:       NewFlash("Incorrect email or password.", FlashLevelError),
+			Form:        loginForm,
 		})
 		return
 	}
@@ -411,8 +415,7 @@ func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	flash := NewFlash("Successfully logged in.", FlashLevelSuccess)
 	d.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
 
-	callbackURL := cmp.Or(r.URL.Query().Get("callback"), d.SuccessRedirectURL)
-	http.Redirect(w, r, callbackURL, http.StatusSeeOther)
+	http.Redirect(w, r, cmp.Or(callbackURL, d.SuccessRedirectURL), http.StatusSeeOther)
 }
 
 func (d *DoLoginHandler) RenderPage(w http.ResponseWriter, data LoginPage) {

@@ -28,8 +28,10 @@
 				<img class="shelter-result__image" src="{{ with .AvatarURL -}} {{ . }} {{- else -}} /public/default-avatar-shelter.png {{- end }}" alt="{{ .Name }}'s Avatar">
 				<div class="shelter-result__details">
 					<div class="shelter-result__role">
-						{{ if eq .Role `super_admin`  }} Super Admin 
-						{{ else }} {{ .Role }}
+						{{ if eq .Role `super_admin`  }}
+							Super Admin 
+						{{ else }}
+							{{ .Role }}
 						{{ end }}
 					</div>
 					<a href="/shelter/{{ .ID }}" class="shelter-result__name">{{ .Name }}</a>

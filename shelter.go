@@ -80,6 +80,7 @@ type ShelterHandler struct {
 	UserSheltersFinder   interface {
 		FindSheltersByUserID(ctx context.Context, userID string) ([]*ShelterWithRole, error)
 	}
+	UnauthorizedRedirectURL string
 }
 
 type ShelterWithRole struct {
@@ -90,6 +91,10 @@ type ShelterWithRole struct {
 func (s *ShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	flash, _ := PopSessionFlash(s.SessionManager, r.Context())
 	userSession, _ := GetSessionUser(s.SessionManager, r.Context())
+	if userSession == nil {
+		http.Redirect(w, r, s.UnauthorizedRedirectURL, http.StatusSeeOther)
+		return
+	}
 
 	shelters, err := s.UserSheltersFinder.FindSheltersByUserID(r.Context(), userSession.UserID)
 	if err != nil {

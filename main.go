@@ -216,10 +216,11 @@ func main() {
 		UserInfoUpdater:      postgresDataStore,
 	})
 	handler.Handle("GET /shelter", &ShelterHandler{
-		Log:                  log.With("path", "GET /shelter"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		UserSheltersFinder:   postgresDataStore,
+		Log:                     log.With("path", "GET /shelter"),
+		PageTemplateRenderer:    pageTemplateRenderer,
+		SessionManager:          sessionManager,
+		UserSheltersFinder:      postgresDataStore,
+		UnauthorizedRedirectURL: "/login?callback=%2Fshelter",
 	})
 	handler.Handle("GET /shelter/registration", &ShelterRegistrationHandler{
 		Log:                     log,

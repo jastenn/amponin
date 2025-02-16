@@ -16,7 +16,7 @@
 				{{ .Message }}					
 			</div>
 		{{ end }}
-		<form action="/login?{{ with .CallbackURL }} callback={{ . }} {{- end }}" method="post" class="gap" aria-labelledby="login-heading">
+		<form action="/login?{{ with .CallbackURL -}} callback={{ . }} {{- end }}" method="post" class="gap" aria-labelledby="login-heading">
 			<div>
 				<label for="email" class="form-label">Email</label>	
 				<input id="email" type="text" name="email"
