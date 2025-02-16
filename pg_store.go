@@ -538,3 +538,35 @@ func (p *PGStore) RemoveEmailUpdateRequest(ctx context.Context, code string) (*E
 
 	return result, nil
 }
+
+func (p *PGStore) FindShelterRoles(ctx context.Context, shelterID string) ([]*FindShelterRolesResult, error) {
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT
+			role.user_id, display_name, email, role,
+			role.created_at, role.updated_at
+		 FROM shelter_roles role
+		 JOIN shelters USING(shelter_id)
+		 JOIN users USING(user_id)
+		 WHERE role.shelter_id = $1`,
+		shelterID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to shelter shelter_roles by shelter_id", shelterID)
+	}
+	defer rows.Close()
+
+	var result []*FindShelterRolesResult
+	for rows.Next() {
+		resultItem := &FindShelterRolesResult{}
+		err := rows.Scan(
+			&resultItem.UserID, &resultItem.DisplayName, &resultItem.Email, &resultItem.Role,
+			&resultItem.CreatedAt, &resultItem.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("unable to scan find shelter result: %w", err)
+		}
+		result = append(result, resultItem)
+	}
+
+	return result, nil
+}

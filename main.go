@@ -103,6 +103,8 @@ func main() {
 
 	googleEmailSender := NewGoogleMailSender(*smtpEmail, *smtpPassword)
 
+	notfoundHandler := http.NotFoundHandler()
+
 	handler := http.NewServeMux()
 	handler.Handle("GET /public/{filename...}",
 		http.StripPrefix("/public", http.FileServerFS(publicFS)),
@@ -116,7 +118,7 @@ func main() {
 	handler.Handle("GET /", &IndexHandler{
 		SessionManager:  sessionManager,
 		TemplateFS:      templatesFS,
-		NotFoundHandler: http.NotFoundHandler(),
+		NotFoundHandler: notfoundHandler,
 	})
 	handler.Handle("GET /signup", &SignupHandler{
 		Log:                  log.With("path", "GET /signup"),
@@ -240,7 +242,7 @@ func main() {
 		Log:                  log.With("path", "GET /shelter/{id}"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
-		NotFoundHandler:      http.NotFoundHandler(),
+		NotFoundHandler:      notfoundHandler,
 		ShelterGetter:        postgresDataStore,
 		ShelterRoleGetter:    postgresDataStore,
 	})
@@ -264,7 +266,7 @@ func main() {
 		Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
-		NotFoundHandler:      http.NotFoundHandler(),
+		NotFoundHandler:      notfoundHandler,
 		ShelterRoleGetter:    postgresDataStore,
 		ShelterGetter:        postgresDataStore,
 		ErrorRedirectURL:     "/shelter/{shelter_id}",
@@ -274,7 +276,7 @@ func main() {
 		Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
-		NotFoundHandler:      http.NotFoundHandler(),
+		NotFoundHandler:      notfoundHandler,
 		ShelterRoleGetter:    postgresDataStore,
 		ShelterGetter:        postgresDataStore,
 		ErrorRedirectURL:     "/shelter/{shelter_id}",
@@ -284,7 +286,7 @@ func main() {
 		Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
-		NotFoundHandler:      http.NotFoundHandler(),
+		NotFoundHandler:      notfoundHandler,
 		ShelterRoleGetter:    postgresDataStore,
 		ShelterGetter:        postgresDataStore,
 		ShelterUpdater:       postgresDataStore,
@@ -292,6 +294,15 @@ func main() {
 		SuccessRedirectURL:   "/shelter/{shelter_id}",
 		ErrorRedirectURL:     "/shelter/{shelter_id}",
 		LoginRedirectURL:     "/login?callback=%2Fshelter%2F{shelter_id}%2Fsettings",
+	})
+	handler.Handle("GET /shelter/{shelter_id}/roles", &ShelterRolesHandler{
+		Log:                  log.With("path", "GET /shelter/{shelter_id}/roles"),
+		PageTemplateRenderer: pageTemplateRenderer,
+		SessionManager:       sessionManager,
+		ShelterRolesFinder:   postgresDataStore,
+		ShelterGetter:        postgresDataStore,
+		ShelterRoleGetter: postgresDataStore,
+		NotFoundHandler:      notfoundHandler,
 	})
 	handler.Handle("GET /pets", &PetsHandler{
 		Log:                  log.With("path", "GET /pets"),
@@ -303,7 +314,7 @@ func main() {
 		Log:                  log.With("path", "GET /{pet_id}"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
-		NotFoundHandler:      http.NotFoundHandler(),
+		NotFoundHandler:      notfoundHandler,
 		PetGetter:            postgresDataStore,
 		ShelterGetter:        postgresDataStore,
 	})

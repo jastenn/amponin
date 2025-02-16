@@ -1,0 +1,57 @@
+.role-list {
+	display: grid;
+	gap: .5rem;
+}
+
+.role-item {
+	display: flex;
+	align-items: start;
+	gap: 1rem;
+}
+
+.role-item__role {
+	width: 6rem;
+	flex-shrink: 0;
+	font-weight: 600;
+}
+
+.role-item__details {
+	flex-grow: 10;
+	width: 0;
+	overflow: hidden;
+	flex-shrink: 10;
+}
+
+.role-item__name,
+.role-item__email {
+	text-overflow: ellipsis;
+	text-wrap: nowrap;
+	overflow: hidden;
+}
+
+.role-item__name {
+	font-weight: 600;
+	font-size: 1.15rem;
+	line-height: 1;
+}
+
+.role-item__actions {
+	width: 3.75rem;
+	flex-shrink: 0;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: .5rem;
+}
+
+.role-item__action {
+	color: inherit;
+	line-height: 1;
+}
+
+.role-item__action--remove:hover {
+	color: var(--color-error);
+}
+
+.role-item__action--edit:hover {
+	color: var(--color-warn);
+}

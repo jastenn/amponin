@@ -25,6 +25,19 @@ const (
 	ShelterRoleEditor     ShelterRole = "editor"
 )
 
+func (s ShelterRole) String() string {
+	switch s {
+	case ShelterRoleSuperAdmin:
+		return "Super Admin"
+	case ShelterRoleAdmin:
+		return "Admin"
+	case ShelterRoleEditor:
+		return "Editor"
+	}
+
+	return string(s)
+}
+
 type Shelter struct {
 	ID          string
 	Name        string
@@ -280,6 +293,18 @@ type ShelterByIDHandler struct {
 	NotFoundHandler      http.Handler
 	ShelterGetter        ShelterGetter
 	ShelterRoleGetter    ShelterRoleGetter
+}
+
+var ErrNoShelter = errors.New("no shelter found")
+
+type ShelterGetter interface {
+	GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error)
+}
+
+var ErrNoShelterRole = errors.New("no shelter role found")
+
+type ShelterRoleGetter interface {
+	GetShelterRoleByID(ctx context.Context, shelterID, userID string) (ShelterRole, error)
 }
 
 func (s *ShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -674,14 +699,124 @@ type ShelterUpdateForm struct {
 	*FieldValidation
 }
 
-var ErrNoShelter = errors.New("no shelter found")
-
-type ShelterGetter interface {
-	GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error)
+type ShelterRolesHandler struct {
+	Log                  *slog.Logger
+	PageTemplateRenderer PageTemplateRenderer
+	ShelterGetter        ShelterGetter
+	ShelterRoleGetter    ShelterRoleGetter
+	ShelterRolesFinder   interface {
+		FindShelterRoles(ctx context.Context, shelterID string) ([]*FindShelterRolesResult, error)
+	}
+	SessionManager          *scs.SessionManager
+	UnauthorizedRedirectURL string
+	NotFoundHandler         http.Handler
 }
 
-var ErrNoShelterRole = errors.New("no shelter role found")
+type FindShelterRolesResult struct {
+	UserID      string
+	DisplayName string
+	Email       string
+	Role        ShelterRole
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
 
-type ShelterRoleGetter interface {
-	GetShelterRoleByID(ctx context.Context, shelterID, userID string) (ShelterRole, error)
+func (s *ShelterRolesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	shelterID := r.PathValue("shelter_id")
+	sessionUser, _ := GetSessionUser(s.SessionManager, r.Context())
+	if sessionUser == nil {
+		s.Log.Debug("Unauthorized access received. Redirecting user.")
+		http.Redirect(w, r, s.UnauthorizedRedirectURL, http.StatusSeeOther)
+		return
+	}
+
+	shelter, err := s.ShelterGetter.GetShelterByID(r.Context(), shelterID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelter) {
+			s.Log.Debug("No shelter found with the given id", "shelter_id", shelterID)
+			s.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+
+		s.Log.Error("Unexpected error while getting shelter by id", "shelter_id", shelterID, "reason", err.Error())
+		s.RenderPage(w, ShelterRolesPage{
+			BasePage: BasePage{
+				SessionUser: sessionUser,
+			},
+			ShelterID:   shelter.ID,
+			ShelterName: shelter.Name,
+			Flash:       NewFlash("Something went wrong. Please try again later.", FlashLevelError),
+		})
+		return
+	}
+
+	role, err := s.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelterID, sessionUser.UserID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelterRole) {
+			s.Log.Debug(
+				"No shelter role was found associated with this user.",
+				"user_id", sessionUser.UserID,
+				"shelter_id", shelterID,
+			)
+			s.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+
+		s.Log.Error(
+			"Unexpected error while getting shelter role associated to user.",
+			"user_id", sessionUser.UserID,
+			"shelter_id", shelterID,
+		)
+		s.RenderPage(w, ShelterRolesPage{
+			BasePage: BasePage{
+				SessionUser: sessionUser,
+			},
+			Flash:       NewFlash("Something went wrong. Please try again later.", FlashLevelError),
+			ShelterID:   shelter.ID,
+			ShelterName: shelter.Name,
+		})
+		return
+	}
+
+	shelterRoles, err := s.ShelterRolesFinder.FindShelterRoles(r.Context(), shelter.ID)
+	if err != nil {
+		s.Log.Error("Unexpected error while getting shelter roles by id", "shelter_id", shelterID, "reason", err.Error())
+		s.RenderPage(w, ShelterRolesPage{
+			BasePage: BasePage{
+				SessionUser: sessionUser,
+			},
+			Role:        role,
+			ShelterID:   shelter.ID,
+			ShelterName: shelter.Name,
+			Flash:       NewFlash("Something went wrong. Please try again later.", FlashLevelError),
+		})
+		return
+	}
+
+	s.Log.Debug("Successfully find shelter roles by id.", "roles_count", len(shelterRoles))
+	s.RenderPage(w, ShelterRolesPage{
+		BasePage: BasePage{
+			SessionUser: sessionUser,
+		},
+		Role:         role,
+		ShelterID:    shelter.ID,
+		ShelterName:  shelter.Name,
+		ShelterRoles: shelterRoles,
+	})
+}
+
+func (s *ShelterRolesHandler) RenderPage(w http.ResponseWriter, data ShelterRolesPage) {
+	err := s.PageTemplateRenderer.RenderPageTemplate(w, "shelter_roles.html", data)
+	if err != nil {
+		panic(err)
+	}
+}
+
+type ShelterRolesPage struct {
+	BasePage
+	Flash        *Flash
+	Role         ShelterRole
+	ShelterID    string
+	ShelterName  string
+	ShelterRoles []*FindShelterRolesResult
 }
