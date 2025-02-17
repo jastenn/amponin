@@ -32,6 +32,9 @@
 }
 
 .shelter-result__image {
+	width: 6rem;
+	aspect-ratio: 1/1;
+	object-fit: cover;
 	border-radius: var(--element-radius, .5rem);
 }
 
