@@ -471,7 +471,7 @@ a.heading--link:focus {
 
 .container-xs {
 	width: calc(100% - 2*var(--spacing-gutter));
-	max-width: 24.5rem;
+	max-width: 30rem;
 	margin: 0 auto;
 }
 

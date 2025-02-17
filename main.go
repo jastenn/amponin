@@ -301,8 +301,26 @@ func main() {
 		SessionManager:       sessionManager,
 		ShelterRolesFinder:   postgresDataStore,
 		ShelterGetter:        postgresDataStore,
-		ShelterRoleGetter: postgresDataStore,
+		ShelterRoleGetter:    postgresDataStore,
 		NotFoundHandler:      notfoundHandler,
+	})
+	handler.Handle("GET /shelter/{shelter_id}/roles/add", &ShelterAddRoleHandler{
+		Log:                  log.With("path", "GET /shelter/{shelter_id}/roles/add"),
+		PageTemplateRenderer: pageTemplateRenderer,
+		SessionManager:       sessionManager,
+		ShelterGetter:        postgresDataStore,
+		ShelterRoleGetter:    postgresDataStore,
+		NotFoundHandler:      notfoundHandler,
+	})
+	handler.Handle("POST /shelter/{shelter_id}/roles/add", &DoShelterAddRoleHandler{
+		Log:                  log.With("path", "POST /shelter/{shelter_id}/roles/add"),
+		PageTemplateRenderer: pageTemplateRenderer,
+		SessionManager:       sessionManager,
+		ShelterGetter:        postgresDataStore,
+		ShelterRoleGetter:    postgresDataStore,
+		NotFoundHandler:      notfoundHandler,
+		SuccessRedirect:      "/shelter/{shelter_id}/roles",
+		ShelterRoleCreator:   postgresDataStore,
 	})
 	handler.Handle("GET /pets", &PetsHandler{
 		Log:                  log.With("path", "GET /pets"),

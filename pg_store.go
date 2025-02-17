@@ -570,3 +570,43 @@ func (p *PGStore) FindShelterRoles(ctx context.Context, shelterID string) ([]*Fi
 
 	return result, nil
 }
+
+func (p *PGStore) CreateShelterRole(ctx context.Context, data NewShelterRole) error {
+	tx, err := p.db.Begin()
+	if err != nil {
+		return fmt.Errorf("unable to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var userID string
+	err = tx.QueryRowContext(ctx,
+		`SELECT user_id FROM users WHERE email = $1`,
+		data.UserEmail,
+	).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNoUser
+		}
+
+		return fmt.Errorf("unable to query users by email: " + err.Error())
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO shelter_roles (shelter_id, user_id, role)
+		 VALUES ($1, $2, $3)`,
+		data.ShelterID, userID, data.Role,
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "unique_shelter_role_user") {
+			return ErrUserHasRole
+		}
+		return fmt.Errorf("unable to query insert into shelter_roles: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("unable to commit transaction: %w", err)
+	}
+
+	return nil
+}
