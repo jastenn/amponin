@@ -288,7 +288,7 @@ type PetsHandler struct {
 	PageTemplateRenderer PageTemplateRenderer
 	SessionManager       *scs.SessionManager
 	PetFinderByLocation  interface {
-		FindPetByLocation(context.Context, *Coordinates, FindPetByLocationFilter) ([]FindPetByLocationResult, error)
+		FindPetByLocation(context.Context, Coordinates, FindPetByLocationFilter) ([]FindPetByLocationResult, error)
 	}
 }
 

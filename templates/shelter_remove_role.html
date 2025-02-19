@@ -1,0 +1,36 @@
+{{ define "head" }}
+	<title>Shelter Remove Role - Amponin</title>
+{{ end }}
+
+{{ define "content" }}
+<main>
+	<div class="card container-xs">
+		<div class="card__hgroup">
+			<h1 id="shelter-remove-role-heading" class="card__heading">Remove Role</h1>
+			<p class="card__subheading">{{ .ShelterName }}</p>
+		</div>
+		{{ with .Flash }}
+		<div class="card__flash
+				{{- if eq .Level `flash_error` }} card__flash--error
+				{{- else if eq .Level `flash_warn` }} card__flash--warn
+				{{- else if eq .Level `flash_success` }} card__flash--success
+				{{- end -}}
+			">
+			{{ .Message }}					
+		</div>
+		{{ end }}
+		<form method="post" action="/shelter/{{ .ShelterID }}/roles/remove?email={{.Email}}" class="gap" aria-labelledby="shelter-remove-role-heading">
+			<div>
+				<label for="confirmation" class="form-label">Please type <strong style="text-transform: none;">{{ .Email }}</strong> to confirm shelter role removal.</label>	
+				<input id="confirmation" name="confirmation" type="text" value="{{ .Form.Confirmation }}"
+					class="form-control"
+					aria-describedby="confirmation-error">
+				{{ with index .Form.FieldErrors `confirmation` }}
+					<small id="confirmation-error" class="form-helper form-helper--error">{{ . }}</small>
+				{{ end }}
+			</div>
+			<button type="submit" class="button">Submit</button>
+		</form>
+	</div>
+</main>
+{{ end }}

@@ -364,6 +364,28 @@ func (p *PGStore) GetShelterRoleByID(ctx context.Context, shelterID, userID stri
 	return ShelterRole(role), nil
 }
 
+func (p *PGStore) GetShelterRoleByEmail(ctx context.Context, shelterID, userEmail string) (ShelterRole, error) {
+	row := p.db.QueryRowContext(
+		ctx,
+		`SELECT role FROM shelter_roles
+		 JOIN users USING (user_id)
+		 WHERE shelter_id = $1 AND users.email = $2`,
+		shelterID, userEmail,
+	)
+
+	var role string
+	err := row.Scan(&role)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNoShelterRole
+		}
+
+		return "", fmt.Errorf("failed to query shelter roles table: %w", err)
+	}
+
+	return ShelterRole(role), nil
+}
+
 func (p *PGStore) RegisterPet(ctx context.Context, data NewPet) (*Pet, error) {
 	row := p.db.QueryRowContext(ctx,
 		`INSERT INTO pets (
@@ -421,7 +443,7 @@ func (p *PGStore) GetPetByID(ctx context.Context, id string) (*Pet, error) {
 	return result, nil
 }
 
-func (p *PGStore) FindPetByLocation(ctx context.Context, location *Coordinates, filter FindPetByLocationFilter) ([]FindPetByLocationResult, error) {
+func (p *PGStore) FindPetByLocation(ctx context.Context, location Coordinates, filter FindPetByLocationFilter) ([]FindPetByLocationResult, error) {
 	if filter.MaxDistance == nil {
 		maxDistance := 15_000
 		filter.MaxDistance = &maxDistance
@@ -551,7 +573,7 @@ func (p *PGStore) FindShelterRoles(ctx context.Context, shelterID string) ([]*Fi
 		shelterID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("unable to shelter shelter_roles by shelter_id", shelterID)
+		return nil, fmt.Errorf("unable to shelter shelter_roles by shelter_id: %w", err)
 	}
 	defer rows.Close()
 
@@ -601,6 +623,44 @@ func (p *PGStore) CreateShelterRole(ctx context.Context, data NewShelterRole) er
 			return ErrUserHasRole
 		}
 		return fmt.Errorf("unable to query insert into shelter_roles: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("unable to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (p *PGStore) DeleteShelterRole(ctx context.Context, shelterID, email string) error {
+	tx, err := p.db.Begin()
+	if err != nil {
+		return fmt.Errorf("unable to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var userID string
+	err = tx.QueryRowContext(
+		ctx,
+		`SELECT user_id FROM users WHERE email = $1`,
+		email,
+	).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNoUser
+		}
+
+		return fmt.Errorf("unable to query users by email: " + err.Error())
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM shelter_roles
+		 WHERE shelter_id = $1 AND user_id = $2 `,
+		shelterID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("unable to delete from shelter_roles: %w", err)
 	}
 
 	err = tx.Commit()
