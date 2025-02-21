@@ -15,6 +15,7 @@ import (
 
 	"github.com/alexedwards/scs/postgresstore"
 	"github.com/alexedwards/scs/v2"
+	"github.com/justinas/alice"
 	_ "github.com/lib/pq"
 )
 
@@ -103,57 +104,65 @@ func main() {
 
 	googleEmailSender := NewGoogleMailSender(*smtpEmail, *smtpPassword)
 
+	authorizedSessionUserMiddleware := &AuthorizedSessionUserMiddleware{
+		Log:                     log.WithGroup("AuthorizedSessionUserMiddleware"),
+		SessionManager:          sessionManager,
+		UnauthorizedMessage:     "Please login first.",
+		UnauthorizedRedirectURL: "/login",
+		CurrentPathQueryKey:     "callback",
+	}
+
 	notfoundHandler := http.NotFoundHandler()
 
-	handler := http.NewServeMux()
-	handler.Handle("GET /public/{filename...}",
+	mux := http.NewServeMux()
+	mux.Handle("GET /public/{filename...}",
 		http.StripPrefix("/public", http.FileServerFS(publicFS)),
 	)
-	handler.Handle("GET /file-store/{filename...}",
+	mux.Handle("GET /file-store/{filename...}",
 		http.StripPrefix(
 			"/file-store",
 			NewSafeFileServer(http.Dir("file-store")),
 		),
 	)
-	handler.Handle("GET /", &IndexHandler{
-		SessionManager:  sessionManager,
-		TemplateFS:      templatesFS,
-		NotFoundHandler: notfoundHandler,
+	mux.Handle("GET /", &IndexHandler{
+		SessionManager:       sessionManager,
+		PageTemplateRenderer: pageTemplateRenderer,
+		NotFoundHandler:      notfoundHandler,
 	})
-	handler.Handle("GET /signup", &SignupHandler{
+	mux.Handle("GET /signup", &SignupHandler{
 		Log:                  log.With("path", "GET /signup"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
-		LoggedInRedirectURL:  "/",
+		SuccessRedirectURL:   "/",
 	})
-	handler.Handle("POST /signup", &DoSignupHandler{
+	mux.Handle("POST /signup", &DoSignupHandler{
 		Log:                     log.With("path", "POST /signup"),
 		PageTemplateRenderer:    pageTemplateRenderer,
 		SessionManager:          sessionManager,
 		MailSender:              googleEmailSender,
 		VerificationRedirectURL: "/signup/verification",
 	})
-	handler.Handle("GET /signup/verification", &SignupCompletionHandler{
+	mux.Handle("GET /signup/verification", &SignupCompletionHandler{
 		Log:                  log.With("path", "GET /signup/verification"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
 		SignupRedirectURL:    "/signup",
 	})
-	handler.Handle("POST /signup/verification", &DoSignupCompletionHandler{
+	mux.Handle("POST /signup/verification", &DoSignupCompletionHandler{
 		Log:                  log.With("path", "POST /signup/verification"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
-		SucccessRedirectURL:  "/login",
-		SignupRedirectURL:    "/signup",
 		LocalAccountCreator:  postgresDataStore,
+		SignupRedirectURL:    "/signup",
+		SucccessRedirectURL:  "/login",
 	})
-	handler.Handle("GET /login", &LoginHandler{
+	mux.Handle("GET /login", &LoginHandler{
 		Log:                  log.With("path", "GET /login"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
 		SuccessRedirectURL:   "/",
 	})
-	handler.Handle("POST /login", &DoLoginHandler{
+	mux.Handle("POST /login", &DoLoginHandler{
 		Log:                       log.With("path", "POST /login"),
 		PageTemplateRenderer:      pageTemplateRenderer,
 		SessionManager:            sessionManager,
@@ -161,189 +170,214 @@ func main() {
 		LoginSessionMaxAge:        time.Hour * 24 * 7,
 		LocalAccountGetterByEmail: postgresDataStore,
 	})
-	handler.Handle("POST /logout", &DoLogout{
+	mux.Handle("POST /logout", &DoLogout{
 		Log:            log.With("path", "POST /logout"),
 		SessionManager: sessionManager,
 	})
-	handler.Handle("GET /account", &AccountSettingsHandler{
-		Log:                  log.With("path", "GET /account"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		UserGetterByID:       postgresDataStore,
-		LoginRedirectURL:     "/login?callback=%2Faccount",
-	})
-	handler.Handle("POST /account", &DoAccountHandler{
-		PageTemplateRenderer:       pageTemplateRenderer,
-		MailRenderer:               mailTemplateRenderer,
-		Log:                        log.With("path", "POST /account"),
-		SessionManager:             sessionManager,
-		UserStore:                  postgresDataStore,
-		FileStore:                  fileStore,
-		UnauthenticatedRedirectURL: "/login?callback=%2Faccount",
-		MailSender:                 googleEmailSender,
-		EmailUpdateRequestCreator:  postgresDataStore,
-		EmailUpdateRequestURL: &url.URL{
-			Scheme: "https",
-			Host:   *host,
-			Path:   "/account/email-update",
-		},
-		EmailUpdateRequestMaxAge: time.Minute * 5,
-		SuccessRedirectURL:       "/account",
-		LocalAccountStore:        postgresDataStore,
-	})
-	handler.Handle("GET /account/email-update", &AccountEmailUpdateHandler{
-		Log:                      log.With("path", "GET /account/email-update"),
-		PageTemplateRenderer:     pageTemplateRenderer,
-		SessionManager:           sessionManager,
-		EmailUpdateRequestGetter: postgresDataStore,
-	})
-	handler.Handle("POST /account/email-update", &DoAccountEmailUpdateHandler{
-		Log:                       log.With("path", "POST /account/email-update"),
-		PageTemplateRenderer:      pageTemplateRenderer,
-		SessionManager:            sessionManager,
-		EmailUpdateRequestStore:   postgresDataStore,
-		LocalAccountGetterByEmail: postgresDataStore,
-		MailSender:                googleEmailSender,
-		VerificationRedirectURL:   "/account/email-update/verification",
-	})
-	handler.Handle("GET /account/email-update/verification", &EmailUpdateVerificationHandler{
+	mux.Handle("GET /account",
+		authorizedSessionUserMiddleware.Apply(&AccountSettingsHandler{
+			Log:                  log.With("path", "GET /account"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			UserGetterByID:       postgresDataStore,
+		}),
+	)
+	mux.Handle("POST /account",
+		authorizedSessionUserMiddleware.Apply(&DoAccountHandler{
+			PageTemplateRenderer:      pageTemplateRenderer,
+			MailRenderer:              mailTemplateRenderer,
+			Log:                       log.With("path", "POST /account"),
+			SessionManager:            sessionManager,
+			UserStore:                 postgresDataStore,
+			FileStore:                 fileStore,
+			MailSender:                googleEmailSender,
+			EmailUpdateRequestCreator: postgresDataStore,
+			EmailUpdateRequestURL: &url.URL{
+				Scheme: "https",
+				Host:   *host,
+				Path:   "/account/email-update",
+			},
+			EmailUpdateRequestMaxAge: time.Minute * 5,
+			SuccessRedirectURL:       "/account",
+			LocalAccountStore:        postgresDataStore,
+		}),
+	)
+	mux.Handle("GET /account/email-update",
+		authorizedSessionUserMiddleware.Apply(&AccountEmailUpdateHandler{
+			Log:                      log.With("path", "GET /account/email-update"),
+			PageTemplateRenderer:     pageTemplateRenderer,
+			SessionManager:           sessionManager,
+			EmailUpdateRequestGetter: postgresDataStore,
+		}),
+	)
+	mux.Handle("POST /account/email-update",
+		authorizedSessionUserMiddleware.Apply(&DoAccountEmailUpdateHandler{
+			Log:                       log.With("path", "POST /account/email-update"),
+			PageTemplateRenderer:      pageTemplateRenderer,
+			SessionManager:            sessionManager,
+			EmailUpdateRequestStore:   postgresDataStore,
+			LocalAccountGetterByEmail: postgresDataStore,
+			MailSender:                googleEmailSender,
+			VerificationRedirectURL:   "/account/email-update/verification",
+		}),
+	)
+	mux.Handle("GET /account/email-update/verification", &EmailUpdateVerificationHandler{
 		Log:                  log.With("path", "GET /account/email-update/verification"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
 	})
-	handler.Handle("POST /account/email-update/verification", &DoEmailUpdateVerficationHandler{
+	mux.Handle("POST /account/email-update/verification", &DoEmailUpdateVerficationHandler{
 		Log:                  log.With("path", "POST /account/email-update/verification"),
 		SessionManager:       sessionManager,
 		PageTemplateRenderer: pageTemplateRenderer,
 		UserInfoUpdater:      postgresDataStore,
 	})
-	handler.Handle("GET /shelter", &ShelterHandler{
-		Log:                     log.With("path", "GET /shelter"),
-		PageTemplateRenderer:    pageTemplateRenderer,
-		SessionManager:          sessionManager,
-		UserSheltersFinder:      postgresDataStore,
-		UnauthorizedRedirectURL: "/login?callback=%2Fshelter",
-	})
-	handler.Handle("GET /shelter/registration", &ShelterRegistrationHandler{
-		Log:                  log,
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		LoginRedirectURL:     "/login?callback=%2Fshelter%2Fregistration",
-	})
-	handler.Handle("POST /shelter/registration", &DoShelterRegistrationHandler{
-		PageTemplateRenderer: pageTemplateRenderer,
-		Log:                  log.With("path", "POST /shelter/registration"),
-		SessionManager:       sessionManager,
-		LoginRedirectURL:     "/login?callback=%2Fshelter%2Fregistration",
-		ShelterCreator:       postgresDataStore,
-		SuccessRedirectURL:   "/shelter/{shelter_id}",
-	})
-	handler.Handle("GET /shelter/{id}", &ShelterByIDHandler{
-		Log:                  log.With("path", "GET /shelter/{id}"),
+	mux.Handle("GET /shelter",
+		authorizedSessionUserMiddleware.Apply(&ShelterHandler{
+			Log:                  log.With("path", "GET /shelter"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			UserSheltersFinder:   postgresDataStore,
+		}),
+	)
+	mux.Handle("GET /shelter/registration",
+		authorizedSessionUserMiddleware.Apply(&ShelterRegistrationHandler{
+			Log:                  log,
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+		}),
+	)
+	mux.Handle("POST /shelter/registration",
+		authorizedSessionUserMiddleware.Apply(&DoShelterRegistrationHandler{
+			PageTemplateRenderer: pageTemplateRenderer,
+			Log:                  log.With("path", "POST /shelter/registration"),
+			SessionManager:       sessionManager,
+			ShelterCreator:       postgresDataStore,
+			SuccessRedirectURL:   "/shelter/{shelter_id}",
+		}),
+	)
+	mux.Handle("GET /shelter/{shelter_id}", &ShelterByIDHandler{
+		Log:                  log.With("path", "GET /shelter/{shelter_id}"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
 		NotFoundHandler:      notfoundHandler,
 		ShelterGetter:        postgresDataStore,
 		ShelterRoleGetter:    postgresDataStore,
 	})
-	handler.Handle("GET /shelter/{id}/post-pet", &PostPetHandler{
-		PageTemplateRenderer: pageTemplateRenderer,
-		Log:                  log.With("path", "GET /shelter/{id}/post-pet"),
-		SessionManager:       sessionManager,
-		ShelterRoleGetter:    postgresDataStore,
-		LoginRedirectURL:     "/login?callback=%2Fshelter%2F{shelter_id}%2Fpost-pet",
-	})
-	handler.Handle("POST /shelter/{shelter_id}/post-pet", &DoPetPostHandler{
-		Log:                  log.With("path", "POST /shelter/{shelter_id}/post-pet"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		ShelterRoleGetter:    postgresDataStore,
-		FileStore:            fileStore,
-		PetRegistry:          postgresDataStore,
-		SuccessRedirectURL:   "/{pet_id}",
-	})
-	handler.Handle("GET /shelter/{shelter_id}/settings", &ShelterSettingsHandler{
-		Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		NotFoundHandler:      notfoundHandler,
-		ShelterRoleGetter:    postgresDataStore,
-		ShelterGetter:        postgresDataStore,
-		LoginRedirectURL:     "/login?callback=%2Fshelter%2F{shelter_id}%2Fsettings",
-	})
-	handler.Handle("GET /shelter/{shelter_id}/update", &ShelterUpdateHandler{
-		Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		NotFoundHandler:      notfoundHandler,
-		ShelterRoleGetter:    postgresDataStore,
-		ShelterGetter:        postgresDataStore,
-		LoginRedirectURL:     "/login?callback=%2Fshelter%2F{shelter_id}%2Fsettings",
-	})
-	handler.Handle("POST /shelter/{shelter_id}/update", &DoShelterUpdateHandler{
-		Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		NotFoundHandler:      notfoundHandler,
-		ShelterRoleGetter:    postgresDataStore,
-		ShelterGetter:        postgresDataStore,
-		ShelterUpdater:       postgresDataStore,
-		FileStore:            fileStore,
-		SuccessRedirectURL:   "/shelter/{shelter_id}",
-		LoginRedirectURL:     "/login?callback=%2Fshelter%2F{shelter_id}%2Fsettings",
-	})
-	handler.Handle("GET /shelter/{shelter_id}/roles", &ShelterRolesHandler{
-		Log:                  log.With("path", "GET /shelter/{shelter_id}/roles"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		ShelterRolesFinder:   postgresDataStore,
-		ShelterGetter:        postgresDataStore,
-		ShelterRoleGetter:    postgresDataStore,
-		NotFoundHandler:      notfoundHandler,
-	})
-	handler.Handle("GET /shelter/{shelter_id}/roles/add", &ShelterAddRoleHandler{
-		Log:                  log.With("path", "GET /shelter/{shelter_id}/roles/add"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		ShelterGetter:        postgresDataStore,
-		ShelterRoleGetter:    postgresDataStore,
-		NotFoundHandler:      notfoundHandler,
-	})
-	handler.Handle("POST /shelter/{shelter_id}/roles/add", &DoShelterAddRoleHandler{
-		Log:                  log.With("path", "POST /shelter/{shelter_id}/roles/add"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		ShelterGetter:        postgresDataStore,
-		ShelterRoleGetter:    postgresDataStore,
-		NotFoundHandler:      notfoundHandler,
-		SuccessRedirect:      "/shelter/{shelter_id}/roles",
-		ShelterRoleCreator:   postgresDataStore,
-	})
-	handler.Handle("GET /shelter/{shelter_id}/roles/remove", &ShelterRemoveRoleHandler{
-		Log:                  log.With("path", "GET /shelter/{shelter_id}/roles/remove"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		ShelterGetter:        postgresDataStore,
-		ShelterRoleGetter:    postgresDataStore,
-		NotFoundHandler:      notfoundHandler,
-	})
-	handler.Handle("POST /shelter/{shelter_id}/roles/remove", &DoShelterRemoveRoleHandler{
-		Log:                  log.With("path", "POST /shelter/{shelter_id}/roles/remove"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		ShelterGetter:        postgresDataStore,
-		ShelterRoleStore:    postgresDataStore,
-		NotFoundHandler:      notfoundHandler,
-		SuccessRedirect:      "/shelter/{shelter_id}/roles",
-		ShelterRoleDeleter:   postgresDataStore,
-	})
-	handler.Handle("GET /pets", &PetsHandler{
+	mux.Handle("GET /shelter/{shelter_id}/post-pet",
+		authorizedSessionUserMiddleware.Apply(&PostPetHandler{
+			PageTemplateRenderer: pageTemplateRenderer,
+			Log:                  log.With("path", "GET /shelter/{shelter_id}/post-pet"),
+			SessionManager:       sessionManager,
+			ShelterRoleGetter:    postgresDataStore,
+		}),
+	)
+	mux.Handle("POST /shelter/{shelter_id}/post-pet",
+		authorizedSessionUserMiddleware.Apply(&DoPetPostHandler{
+			Log:                  log.With("path", "POST /shelter/{shelter_id}/post-pet"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			ShelterRoleGetter:    postgresDataStore,
+			FileStore:            fileStore,
+			PetRegistry:          postgresDataStore,
+			SuccessRedirectURL:   "/{pet_id}",
+		}),
+	)
+	mux.Handle("GET /shelter/{shelter_id}/settings",
+		authorizedSessionUserMiddleware.Apply(&ShelterSettingsHandler{
+			Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			NotFoundHandler:      notfoundHandler,
+			ShelterRoleGetter:    postgresDataStore,
+			ShelterGetter:        postgresDataStore,
+		}),
+	)
+	mux.Handle("GET /shelter/{shelter_id}/update",
+		authorizedSessionUserMiddleware.Apply(&ShelterUpdateHandler{
+			Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			NotFoundHandler:      notfoundHandler,
+			ShelterRoleGetter:    postgresDataStore,
+			ShelterGetter:        postgresDataStore,
+		}),
+	)
+	mux.Handle("POST /shelter/{shelter_id}/update",
+		authorizedSessionUserMiddleware.Apply(&DoShelterUpdateHandler{
+			Log:                  log.With("path", "GET /shelter/{shelter_id}/settings"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			NotFoundHandler:      notfoundHandler,
+			ShelterRoleGetter:    postgresDataStore,
+			ShelterGetter:        postgresDataStore,
+			ShelterUpdater:       postgresDataStore,
+			FileStore:            fileStore,
+			SuccessRedirectURL:   "/shelter/{shelter_id}",
+		}),
+	)
+	mux.Handle("GET /shelter/{shelter_id}/roles",
+		authorizedSessionUserMiddleware.Apply(&ShelterRolesHandler{
+			Log:                  log.With("path", "GET /shelter/{shelter_id}/roles"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			ShelterRolesFinder:   postgresDataStore,
+			ShelterGetter:        postgresDataStore,
+			ShelterRoleGetter:    postgresDataStore,
+			NotFoundHandler:      notfoundHandler,
+		}),
+	)
+	mux.Handle("GET /shelter/{shelter_id}/roles/add",
+		authorizedSessionUserMiddleware.Apply(&ShelterAddRoleHandler{
+			Log:                  log.With("path", "GET /shelter/{shelter_id}/roles/add"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			ShelterGetter:        postgresDataStore,
+			ShelterRoleGetter:    postgresDataStore,
+			NotFoundHandler:      notfoundHandler,
+		}),
+	)
+	mux.Handle("POST /shelter/{shelter_id}/roles/add",
+		authorizedSessionUserMiddleware.Apply(&DoShelterAddRoleHandler{
+			Log:                  log.With("path", "POST /shelter/{shelter_id}/roles/add"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			ShelterGetter:        postgresDataStore,
+			ShelterRoleGetter:    postgresDataStore,
+			NotFoundHandler:      notfoundHandler,
+			SuccessRedirect:      "/shelter/{shelter_id}/roles",
+			ShelterRoleCreator:   postgresDataStore,
+		}),
+	)
+	mux.Handle("GET /shelter/{shelter_id}/roles/remove",
+		authorizedSessionUserMiddleware.Apply(&ShelterRemoveRoleHandler{
+			Log:                  log.With("path", "GET /shelter/{shelter_id}/roles/remove"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			ShelterGetter:        postgresDataStore,
+			ShelterRoleGetter:    postgresDataStore,
+			NotFoundHandler:      notfoundHandler,
+		}),
+	)
+	mux.Handle("POST /shelter/{shelter_id}/roles/remove",
+		authorizedSessionUserMiddleware.Apply(&DoShelterRemoveRoleHandler{
+			Log:                  log.With("path", "POST /shelter/{shelter_id}/roles/remove"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			ShelterGetter:        postgresDataStore,
+			ShelterRoleStore:     postgresDataStore,
+			NotFoundHandler:      notfoundHandler,
+			SuccessRedirect:      "/shelter/{shelter_id}/roles",
+			ShelterRoleDeleter:   postgresDataStore,
+		}),
+	)
+	mux.Handle("GET /pets", &PetsHandler{
 		Log:                  log.With("path", "GET /pets"),
 		SessionManager:       sessionManager,
 		PageTemplateRenderer: pageTemplateRenderer,
 		PetFinderByLocation:  postgresDataStore,
 	})
-	handler.Handle("GET /{pet_id}", &PetByIDHandler{
+	mux.Handle("GET /{pet_id}", &PetByIDHandler{
 		Log:                  log.With("path", "GET /{pet_id}"),
 		PageTemplateRenderer: pageTemplateRenderer,
 		SessionManager:       sessionManager,
@@ -352,9 +386,14 @@ func main() {
 		ShelterGetter:        postgresDataStore,
 	})
 
+	app := alice.New(
+		sessionManager.LoadAndSave,
+		NewSessionUserMiddleware(sessionManager),
+	).Then(mux)
+
 	server := http.Server{
 		Addr:         *address,
-		Handler:      sessionManager.LoadAndSave(handler),
+		Handler:      app,
 		ReadTimeout:  *readTimeout,
 		WriteTimeout: *writeTimeout,
 		IdleTimeout:  *idleTimeout,

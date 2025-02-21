@@ -62,14 +62,15 @@ type SessionUser struct {
 	AvatarURL   *string
 }
 
-func GetSessionUser(sm *scs.SessionManager, ctx context.Context) (*SessionUser, error) {
-	data := &SessionUser{}
-	data, ok := sm.Get(ctx, SessionKeyUser).(*SessionUser)
+const ContextKeySessionUser = "context_key_session_user"
+
+func GetSessionUser(ctx context.Context) *SessionUser {
+	user, ok := ctx.Value(ContextKeySessionUser).(*SessionUser)
 	if !ok {
-		return nil, errors.New("unable to get login session from session")
+		return nil
 	}
 
-	return data, nil
+	return user
 }
 
 type BasePage struct {

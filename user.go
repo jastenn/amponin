@@ -46,20 +46,21 @@ type SignupHandler struct {
 	Log                  *slog.Logger
 	PageTemplateRenderer PageTemplateRenderer
 	SessionManager       *scs.SessionManager
-	LoggedInRedirectURL  string
+	SuccessRedirectURL  string
 }
 
 func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	flash, _ := PopSessionFlash(s.SessionManager, r.Context())
-	loginSession, _ := GetSessionUser(s.SessionManager, r.Context())
-	if loginSession != nil {
-		s.Log.Debug("User is currently logged in.", "user_id", loginSession.UserID)
+	userSession := GetSessionUser(r.Context())
+
+	if userSession != nil {
+		s.Log.Debug("User is currently logged in.", "user_id", userSession.UserID)
 		flash := NewFlash("Please log out first before signing up.", FlashLevelError)
 		s.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
-		http.Redirect(w, r, s.LoggedInRedirectURL, http.StatusSeeOther)
+		http.Redirect(w, r, s.SuccessRedirectURL, http.StatusSeeOther)
 		return
 	}
 
+	flash, _ := PopSessionFlash(s.SessionManager, r.Context())
 	r, _ = http.NewRequest(r.Method, r.URL.String(), nil)
 	err := s.PageTemplateRenderer.RenderPageTemplate(w, "signup.html", SignupPage{
 		Flash: flash,
@@ -107,8 +108,7 @@ type DoSignupHandler struct {
 }
 
 func (d *DoSignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	flash, _ := PopSessionFlash(d.SessionManager, r.Context())
-	loginSession, _ := GetSessionUser(d.SessionManager, r.Context())
+	loginSession := GetSessionUser(r.Context())
 	if loginSession != nil {
 		d.Log.Debug("User is currently logged in.", "user_id", loginSession.UserID)
 		flash := NewFlash("Please log out first before signing up.", FlashLevelError)
@@ -135,8 +135,7 @@ func (d *DoSignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		err := d.PageTemplateRenderer.RenderPageTemplate(w, "signup.html", SignupPage{
-			Flash: flash,
-			Form:  form,
+			Form: form,
 		})
 		if err != nil {
 			panic(err)
@@ -300,9 +299,7 @@ type LoginHandler struct {
 }
 
 func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	callbackURL := r.FormValue("callback")
-	flash, _ := PopSessionFlash(l.SessionManager, r.Context())
-	loginSession, _ := GetSessionUser(l.SessionManager, r.Context())
+	loginSession := GetSessionUser(r.Context())
 	if loginSession != nil {
 		l.Log.Debug("User is already logged in.", "user_id", loginSession.UserID)
 		flash := NewFlash("You are already logged in.", FlashLevelError)
@@ -311,6 +308,8 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	callbackURL := r.FormValue("callback")
+	flash, _ := PopSessionFlash(l.SessionManager, r.Context())
 	r, _ = http.NewRequest(r.Method, r.URL.String(), nil)
 	err := l.PageTemplateRenderer.RenderPageTemplate(w, "login.html", LoginPage{
 		Flash:       flash,
@@ -432,7 +431,12 @@ type DoLogout struct {
 }
 
 func (d *DoLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	sessionUser, _ := GetSessionUser(d.SessionManager, r.Context())
+	sessionUser := GetSessionUser(r.Context())
+	if sessionUser == nil {
+		d.Log.Debug("No user is logged in.")
+		return
+	}
+
 	d.SessionManager.Remove(r.Context(), SessionKeyUser)
 
 	d.Log.Debug("User successfully logged out.", "user_id", sessionUser.UserID)
@@ -457,6 +461,12 @@ type AccountGeneralUpdateForm struct {
 	*FieldValidation
 }
 
+func NewAccountGeneralUpdateForm() AccountGeneralUpdateForm {
+	return AccountGeneralUpdateForm{
+		FieldValidation: NewFieldValidation(),
+	}
+}
+
 type AccountPasswordUpdateForm struct {
 	CurrentPassword string
 	NewPassword     string
@@ -465,7 +475,13 @@ type AccountPasswordUpdateForm struct {
 	*FieldValidation
 }
 
-func NewAccountPasswordUpdateForm(r *http.Request) AccountPasswordUpdateForm {
+func NewAccountPasswordUpdateForm() AccountPasswordUpdateForm {
+	return AccountPasswordUpdateForm{
+		FieldValidation: NewFieldValidation(),
+	}
+}
+
+func NewAccountPasswordUpdateFormFromRequest(r *http.Request) AccountPasswordUpdateForm {
 	return AccountPasswordUpdateForm{
 		CurrentPassword: r.FormValue("current-password"),
 		NewPassword:     r.FormValue("new-password"),
@@ -483,59 +499,58 @@ type AccountSettingsHandler struct {
 	PageTemplateRenderer PageTemplateRenderer
 	SessionManager       *scs.SessionManager
 	UserGetterByID       UserGetterByID
-	LoginRedirectURL     string
 
 	accountSettingsTemplateCache *template.Template
 }
 
 func (a *AccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	focus := r.FormValue("focus")
-	flash, _ := PopSessionFlash(a.SessionManager, r.Context())
-	sessionUser, _ := GetSessionUser(a.SessionManager, r.Context())
+	sessionUser := GetSessionUser(r.Context())
 	if sessionUser == nil {
-		a.Log.Debug("Unauthenticated user tried account settings.")
-		flash := NewFlash("Unauthorized. Please log in first.", FlashLevelError)
-		a.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
-		http.Redirect(w, r, a.LoginRedirectURL, http.StatusSeeOther)
-		return
+		BasicHTTPError(w, http.StatusUnauthorized)
 	}
 
 	user, err := a.UserGetterByID.GetUserByID(r.Context(), sessionUser.UserID)
 	if err != nil {
 		if errors.Is(err, ErrNoUser) {
-			a.Log.Debug("User no longer exists.")
-			flash := NewFlash("Unauthorized. User no longer exists.", FlashLevelError)
-			a.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
-			http.Redirect(w, r, a.LoginRedirectURL, http.StatusSeeOther)
+			a.Log.Debug("User no longer exists.", "user_id", sessionUser.UserID)
+			a.RenderPage(w, AccountSettingsPage{
+				BasePage: BasePage{
+					SessionUser: sessionUser,
+				},
+				Flash: NewFlash("Something went wrong. Please try again later.", FlashLevelError),
+			})
+			if err != nil {
+				panic(err)
+			}
 			return
 		}
 
 		a.Log.Error("Unable to get user by its id.", "reason", err.Error())
-		err = a.PageTemplateRenderer.RenderPageTemplate(w, "account.html", AccountSettingsPage{
+		a.RenderPage(w, AccountSettingsPage{
 			BasePage: BasePage{
 				SessionUser: sessionUser,
 			},
+			Flash: NewFlash("Something went wrong. Please try again later.", FlashLevelError),
 		})
-		if err != nil {
-			panic(err)
-		}
 		return
 	}
 
-	err = a.PageTemplateRenderer.RenderPageTemplate(w, "account.html", AccountSettingsPage{
+	flash, _ := PopSessionFlash(a.SessionManager, r.Context())
+	focus := r.FormValue("focus")
+	a.RenderPage(w, AccountSettingsPage{
 		BasePage: BasePage{
 			SessionUser: sessionUser,
 		},
-		Flash: flash,
-		User:  user,
-		Focus: focus,
-		GeneralUpdateForm: AccountGeneralUpdateForm{
-			FieldValidation: NewFieldValidation(),
-		},
-		PasswordUpdateForm: AccountPasswordUpdateForm{
-			FieldValidation: NewFieldValidation(),
-		},
+		Flash:              flash,
+		User:               user,
+		Focus:              focus,
+		GeneralUpdateForm:  NewAccountGeneralUpdateForm(),
+		PasswordUpdateForm: NewAccountPasswordUpdateForm(),
 	})
+}
+
+func (a AccountSettingsHandler) RenderPage(w http.ResponseWriter, data AccountSettingsPage) {
+	err := a.PageTemplateRenderer.RenderPageTemplate(w, "account.html", data)
 	if err != nil {
 		panic(err)
 	}
@@ -584,35 +599,40 @@ type DoAccountHandler struct {
 	EmailUpdateRequestCreator interface {
 		CreateEmailUpdateRequest(context.Context, NewEmailUpdateRequest) (*EmailUpdateRequest, error)
 	}
-	UnauthenticatedRedirectURL string
-	SuccessRedirectURL         string
-	EmailUpdateRequestURL      *url.URL
-	EmailUpdateRequestMaxAge   time.Duration
-	MailSender                 MailSender
+	SuccessRedirectURL       string
+	EmailUpdateRequestURL    *url.URL
+	EmailUpdateRequestMaxAge time.Duration
+	MailSender               MailSender
 
 	accountSettingsTemplateCache *template.Template
 }
 
 func (d *DoAccountHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	loginSession, _ := GetSessionUser(d.SessionManager, r.Context())
-	if loginSession == nil {
-		d.Log.Debug("User unauthenticated. The request was redirected to UnauthenticatedRedirectURL.")
-		flash := NewFlash("Please log in first.", FlashLevelError)
-		d.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
+	userSession := GetSessionUser(r.Context())
+	if userSession == nil {
+		BasicHTTPError(w, http.StatusUnauthorized)
 		return
 	}
 
-	user, err := d.UserStore.GetUserByID(r.Context(), loginSession.UserID)
+	user, err := d.UserStore.GetUserByID(r.Context(), userSession.UserID)
 	if err != nil {
 		if errors.Is(err, ErrNoUser) {
+			d.Log.Debug("User no longer exists.", "user_id", user.ID)
 			d.SessionManager.Remove(r.Context(), SessionKeyUser)
-			d.Log.Debug("User no longer exists. The request was redirected to UnauthenticatedRedirectURL.")
-			http.Redirect(w, r, d.UnauthenticatedRedirectURL, http.StatusSeeOther)
+			d.RenderPage(w, AccountSettingsPage{
+				BasePage: BasePage{
+					SessionUser: userSession,
+				},
+				Flash: NewFlash("User no longer exists", FlashLevelError),
+			})
 			return
 		}
 
 		d.Log.Error("Unexpected error while parsing avatar.", "error", err.Error())
 		d.RenderPage(w, AccountSettingsPage{
+			BasePage: BasePage{
+				SessionUser: userSession,
+			},
 			Flash: NewFlash("Unexpected error occurred. Please try again later.", FlashLevelError),
 		})
 		return
@@ -620,18 +640,18 @@ func (d *DoAccountHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.FormValue("action") {
 	case "general-update":
-		d.HandleGeneralUpdate(w, r, loginSession, user)
+		d.HandleGeneralUpdate(w, r, userSession, user)
 		return
 	case "email-update":
-		d.HandleEmailUpdate(w, r, loginSession, user)
+		d.HandleEmailUpdate(w, r, userSession, user)
 		return
 	case "password-update":
-		d.HandlePasswordUpdate(w, r, loginSession, user)
+		d.HandlePasswordUpdate(w, r, userSession, user)
 		return
 	default:
 		d.RenderPage(w, AccountSettingsPage{
 			BasePage: BasePage{
-				SessionUser: loginSession,
+				SessionUser: userSession,
 			},
 			User:  user,
 			Flash: NewFlash("Unknown action", FlashLevelError),
@@ -642,6 +662,9 @@ func (d *DoAccountHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (d *DoAccountHandler) HandleGeneralUpdate(w http.ResponseWriter, r *http.Request, sessionUser *SessionUser, user *User) {
 	fieldValidation := NewFieldValidation()
+
+	form := NewAccountGeneralUpdateForm()
+	form.DisplayName = strings.TrimSpace(r.FormValue("display-name"))
 
 	var avatar *string
 	if b, filename, err := FormImage(r, "avatar"); err == nil {
@@ -661,11 +684,10 @@ func (d *DoAccountHandler) HandleGeneralUpdate(w http.ResponseWriter, r *http.Re
 	}
 
 	var displayName *string
-	if v := r.FormValue("display-name"); v != "" {
-		fieldValidation.Check(len(v) == 1, "display-name", "Value is too short.")
-		fieldValidation.Check(len(v) > 16, "display-name", "Value is too long. It must not exceed 16 characters long")
-		v = strings.TrimSpace(v)
-		displayName = &v
+	if form.DisplayName != "" {
+		fieldValidation.Check(len(form.DisplayName) == 1, "display-name", "Value is too short.")
+		fieldValidation.Check(len(form.DisplayName) > 16, "display-name", "Value is too long. It must not exceed 16 characters long")
+		displayName = &form.DisplayName
 	}
 
 	if !fieldValidation.Valid() {
@@ -692,7 +714,13 @@ func (d *DoAccountHandler) HandleGeneralUpdate(w http.ResponseWriter, r *http.Re
 		if errors.Is(err, ErrNoUser) {
 			d.Log.Debug("User no longer exists.", "user_id", sessionUser.UserID)
 			d.SessionManager.Remove(r.Context(), SessionKeyUser)
-			http.Redirect(w, r, d.UnauthenticatedRedirectURL, http.StatusSeeOther)
+			d.RenderPage(w, AccountSettingsPage{
+				BasePage: BasePage{
+					SessionUser: sessionUser,
+				},
+				User:  user,
+				Flash: NewFlash("User no longer exists.", FlashLevelError),
+			})
 			return
 		}
 
@@ -796,7 +824,7 @@ func (d *DoAccountHandler) HandleEmailUpdate(w http.ResponseWriter, r *http.Requ
 }
 
 func (d *DoAccountHandler) HandlePasswordUpdate(w http.ResponseWriter, r *http.Request, userSession *SessionUser, user *User) {
-	form := NewAccountPasswordUpdateForm(r)
+	form := NewAccountPasswordUpdateFormFromRequest(r)
 
 	form.Check(form.CurrentPassword == "", "current-password", "Please fill out this field.")
 	form.Check(form.NewPassword == "", "new-password", "Please fill out this field.")
@@ -909,7 +937,7 @@ type EmailUpdateRequestGetter interface {
 }
 
 func (a *AccountEmailUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	sessionUser, _ := GetSessionUser(a.SessionManager, r.Context())
+	sessionUser := GetSessionUser(r.Context())
 
 	requestCode := r.URL.Query().Get("request-code")
 	if requestCode == "" {
@@ -943,7 +971,6 @@ func (a *AccountEmailUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	sessionUser, _ = GetSessionUser(a.SessionManager, r.Context())
 	err = a.PageTemplateRenderer.RenderPageTemplate(w, "email_update.html", AccountEmailUpdatePage{
 		LoginSession: sessionUser,
 		RequestCode:  requestCode,
@@ -980,7 +1007,8 @@ type DoAccountEmailUpdateHandler struct {
 }
 
 func (a *DoAccountEmailUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	sessionUser, _ := GetSessionUser(a.SessionManager, r.Context())
+	sessionUser := GetSessionUser(r.Context())
+
 	requestCode := r.FormValue("request-code")
 	if requestCode == "" {
 		a.Log.Debug("Request code for email update is invalid.", "request_code", requestCode)
@@ -1145,7 +1173,8 @@ type EmailUpdateVerificationHandler struct {
 }
 
 func (e *EmailUpdateVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	sessionUser, _ := GetSessionUser(e.SessionManager, r.Context())
+	sessionUser := GetSessionUser(r.Context())
+
 	sessionEmailUpdate, ok := e.SessionManager.Get(r.Context(), SessionKeyEmailUpdate).(*SessionEmailUpdate)
 	if !ok {
 		e.Log.Debug("State no longer valid for email update verification. Some data from session was missing.")
@@ -1182,7 +1211,8 @@ type DoEmailUpdateVerficationHandler struct {
 }
 
 func (d *DoEmailUpdateVerficationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	sessionUser, _ := GetSessionUser(d.SessionManager, r.Context())
+	sessionUser := GetSessionUser(r.Context())
+
 	sessionEmailUpdate, ok := d.SessionManager.Get(r.Context(), SessionKeyEmailUpdate).(*SessionEmailUpdate)
 	if !ok {
 		d.Log.Error("Invalid state. Please restart email update process.")

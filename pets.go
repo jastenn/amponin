@@ -46,24 +46,17 @@ type PostPetHandler struct {
 	PageTemplateRenderer PageTemplateRenderer
 	SessionManager       *scs.SessionManager
 	ShelterRoleGetter    ShelterRoleGetter
-	LoginRedirectURL     string
 }
 
 func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	shelterID := r.PathValue("id")
-	if shelterID == "" {
-		panic("shelter id is missing")
-	}
-
-	sessionUser, _ := GetSessionUser(p.SessionManager, r.Context())
+	sessionUser := GetSessionUser(r.Context())
 	if sessionUser == nil {
-		p.Log.Debug("Unauthorized, user is not logged in.")
-		flash := NewFlash("Please login first.", FlashLevelError)
-		p.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
-		redirectURL := strings.ReplaceAll(p.LoginRedirectURL, "{shelter_id}", shelterID)
-		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		p.Log.Debug("Unauthorized request.")
+		BasicHTTPError(w, http.StatusInternalServerError)
 		return
 	}
+
+	shelterID := r.PathValue("shelter_id")
 
 	_, err := p.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelterID, sessionUser.UserID)
 	if err != nil {
@@ -136,17 +129,14 @@ type NewPet struct {
 }
 
 func (d *DoPetPostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	shelterID := r.PathValue("shelter_id")
-
-	sessionUser, _ := GetSessionUser(d.SessionManager, r.Context())
+	sessionUser := GetSessionUser(r.Context())
 	if sessionUser == nil {
-		d.Log.Debug("Unauthorized, user is not logged in.")
-		flash := NewFlash("Please login first.", FlashLevelError)
-		d.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
-		redirectURL := strings.ReplaceAll(d.LoginRedirectURL, "{shelter_id}", shelterID)
-		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		d.Log.Debug("Unauthorized request")
+		BasicHTTPError(w, http.StatusUnauthorized)
 		return
 	}
+
+	shelterID := r.PathValue("shelter_id")
 
 	_, err := d.ShelterRoleGetter.GetShelterRoleByID(r.Context(), shelterID, sessionUser.UserID)
 	if err != nil {
@@ -304,8 +294,7 @@ type FindPetByLocationFilter struct {
 }
 
 func (p *PetsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	flash, _ := PopSessionFlash(p.SessionManager, r.Context())
-	loginSession, _ := GetSessionUser(p.SessionManager, r.Context())
+	sessionUser := GetSessionUser(r.Context())
 
 	query := PetSearchQuery{
 		Location: r.FormValue("location"),
@@ -319,9 +308,8 @@ func (p *PetsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			p.Log.Debug("Coordinates is invaild.", "coordinates", query.Location)
 			p.RenderPage(w, PetsPage{
 				BasePage: BasePage{
-					SessionUser: loginSession,
+					SessionUser: sessionUser,
 				},
-				Flash:     flash,
 				FormError: "Location is invalid.",
 				Query:     query,
 			})
@@ -334,9 +322,8 @@ func (p *PetsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				p.Log.Debug("Type is invaild.", "coordinates", query.Location)
 				p.RenderPage(w, PetsPage{
 					BasePage: BasePage{
-						SessionUser: loginSession,
+						SessionUser: sessionUser,
 					},
-					Flash:     flash,
 					FormError: "Type is invalid.",
 					Query:     query,
 				})
@@ -353,7 +340,7 @@ func (p *PetsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			p.Log.Error("Unable to find pet by location.", "reason", err.Error())
 			p.RenderPage(w, PetsPage{
 				BasePage: BasePage{
-					SessionUser: loginSession,
+					SessionUser: sessionUser,
 				},
 				Flash: NewFlash("Something went wrong. Please try again later.", FlashLevelError),
 				Query: query,
@@ -363,9 +350,11 @@ func (p *PetsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p.Log.Debug("Pet search by location successful.", "total_result", len(results))
+
+	flash, _ := PopSessionFlash(p.SessionManager, r.Context())
 	p.RenderPage(w, PetsPage{
 		BasePage: BasePage{
-			SessionUser: loginSession,
+			SessionUser: sessionUser,
 		},
 		Flash:   flash,
 		Query:   query,
