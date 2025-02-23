@@ -312,7 +312,7 @@ type ShelterRoleGetterByEmail interface {
 }
 
 func (s *ShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	shelterID := r.PathValue("id")
+	shelterID := r.PathValue("shelter_id")
 
 	shelter, err := s.ShelterGetter.GetShelterByID(r.Context(), shelterID)
 	if err != nil {
