@@ -371,6 +371,16 @@ func main() {
 			ShelterRoleDeleter:   postgresDataStore,
 		}),
 	)
+	mux.Handle("GET /shelter/{shelter_id}/roles/edit",
+		authorizedSessionUserMiddleware.Apply(&ShelterEditRoleHandler{
+			Log:                  log.With("path", "GET /shelter/{shelter_id}/roles/edit"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			ShelterRoleStore:     postgresDataStore,
+			ShelterGetter:        postgresDataStore,
+			NotFoundHandler:      notfoundHandler,
+		}),
+	)
 	mux.Handle("GET /pets", &PetsHandler{
 		Log:                  log.With("path", "GET /pets"),
 		SessionManager:       sessionManager,
