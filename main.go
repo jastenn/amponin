@@ -381,6 +381,17 @@ func main() {
 			NotFoundHandler:      notfoundHandler,
 		}),
 	)
+	mux.Handle("POST /shelter/{shelter_id}/roles/edit",
+		authorizedSessionUserMiddleware.Apply(&DoShelterEditRoleHandler{
+			Log:                  log.With("path", "POST /shelter/{shelter_id}/roles/edit"),
+			PageTemplateRenderer: pageTemplateRenderer,
+			SessionManager:       sessionManager,
+			ShelterRoleStore:     postgresDataStore,
+			ShelterGetter:        postgresDataStore,
+			NotFoundHandler:      notfoundHandler,
+			SuccessRedirectURL:   "/shelter/{shelter_id}/roles",
+		}),
+	)
 	mux.Handle("GET /pets", &PetsHandler{
 		Log:                  log.With("path", "GET /pets"),
 		SessionManager:       sessionManager,
