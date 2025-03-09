@@ -1292,6 +1292,7 @@ func (d *DoShelterRemoveRoleHandler) RenderPage(w io.Writer, data ShelterRemoveR
 	}
 }
 
+// Improve this struct and its methods, you are allowed to create a new file
 type ShelterEditRoleHandler struct {
 	Log                  *slog.Logger
 	PageTemplateRenderer PageTemplateRenderer
@@ -1308,15 +1309,15 @@ func (s *ShelterEditRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	shelterID := r.PathValue("shelter_id")
 	targetEmail := r.URL.Query().Get("email")
 	if targetEmail == "" {
-		s.Log.Debug("Target email is a required parameter")
-		BasicHTTPError(w, http.StatusUnprocessableEntity)
+		s.Log.Debug("Target id is a required parameter")
+		s.Error(w, r, "Target email is a required parameter.")
 		return
 	}
 
 	sessionUser := GetSessionUser(r.Context())
 	if sessionUser == nil {
 		s.Log.Debug("Unauthorized request.")
-		BasicHTTPError(w, http.StatusUnauthorized)
+		RenderClientErrorPage(s.PageTemplateRenderer, w, "Unauthorized request.")
 		return
 	}
 
@@ -1328,9 +1329,8 @@ func (s *ShelterEditRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			s.NotFoundHandler.ServeHTTP(w, r)
 			return
 		}
-
 		s.Log.Error("Unexpected error while getting shelter by id.", "shelter_id", shelter.ID)
-		BasicHTTPError(w, http.StatusInternalServerError)
+		RenderClientErrorPage(s.PageTemplateRenderer, w, "Something went wrong. Please try again later.")
 		return
 	}
 
@@ -1339,51 +1339,52 @@ func (s *ShelterEditRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		if errors.Is(err, ErrNoShelterRole) {
 			s.Log.Debug("No shelter role was found associated with this user.", "user_id", sessionUser.UserID, "shelter_id", shelterID)
-			BasicHTTPError(w, http.StatusUnauthorized)
+			RenderClientErrorPage(s.PageTemplateRenderer, w, "Unauthorized request.")
 			return
 		}
 
 		s.Log.Error("Unexpected error while getting shelter role by id.", "user_id", sessionUser.UserID, "shelter_id", shelter.ID)
-		BasicHTTPError(w, http.StatusInternalServerError)
+		RenderClientErrorPage(s.PageTemplateRenderer, w, "Something went wrong. Please try again later.")
 		return
 	}
 
 	if role != ShelterRoleAdmin && role != ShelterRoleSuperAdmin {
 		s.Log.Error("Unauthorized. Must be an admin or higher", "user_id", sessionUser.UserID, "shelter_id", shelter.ID, "role", role)
-		BasicHTTPError(w, http.StatusUnauthorized)
+		s.Error(w, r, "Unauthorized to manage shelter roles. Must be an admin or higher.")
 		return
 	}
 
 	targetRole, err := s.ShelterRoleStore.GetShelterRoleByEmail(r.Context(), shelterID, targetEmail)
 	if err != nil {
 		s.Log.Error("Unable to query for target's shelter role.", "reason", err.Error())
-		BasicHTTPError(w, http.StatusInternalServerError)
+		s.Error(w, r, "Something went wrong. Please try again later.")
 		return
 	}
 
 	if targetRole == ShelterRoleSuperAdmin {
 		s.Log.Error("Editing super admin's role is not allowed.")
-		if url := r.Referer(); url != "" {
-			flash := NewFlash("Super Admin is not allowed to be edited this way.", FlashLevelError)
-			s.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
-			http.Redirect(w, r, url, http.StatusSeeOther)
-			return
-		}
-		BasicHTTPError(w, http.StatusUnauthorized)
+		s.Error(w, r, "Super Admin is not allowed to be edited this way.")
 		return
 	}
 
-	err = s.PageTemplateRenderer.RenderPageTemplate(w, "shelter_edit_role.html", ShelterEditRolePage{
+	err = s.PageTemplateRenderer.RenderPageTemplate(w, "shelter_role_edit.html", ShelterEditRolePage{
 		BasePage: BasePage{
 			SessionUser: sessionUser,
 		},
 		ShelterID:   shelterID,
 		ShelterName: shelter.Name,
-		Form:        NewShelterEditForm(targetEmail),
+		Email:       targetEmail,
+		Role:        string(targetRole),
 	})
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (d *ShelterEditRoleHandler) Error(w http.ResponseWriter, r *http.Request, message string) {
+	flash := NewFlash("Something went wrong. Please try again later.", FlashLevelError)
+	d.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
+	http.Redirect(w, r, r.Referer(), http.StatusSeeOther)
 }
 
 type ShelterEditRolePage struct {
@@ -1391,21 +1392,9 @@ type ShelterEditRolePage struct {
 	Flash       *Flash
 	ShelterID   string
 	ShelterName string
-	Form        ShelterEditRoleForm
-}
-
-type ShelterEditRoleForm struct {
-	Email string
-	Role  string
-	*FieldValidation
-}
-
-func NewShelterEditForm(email string) ShelterEditRoleForm {
-	return ShelterEditRoleForm{
-		Email:           email,
-		Role:            "",
-		FieldValidation: NewFieldValidation(),
-	}
+	Email       string
+	Role        string
+	RoleError   string
 }
 
 type DoShelterEditRoleHandler struct {
@@ -1415,12 +1404,137 @@ type DoShelterEditRoleHandler struct {
 	ShelterRoleStore     interface {
 		ShelterRoleGetter
 		ShelterRoleGetterByEmail
+		ShelterRoleUpdater
 	}
-	SessionManager     *scs.SessionManager
-	NotFoundHandler    http.Handler
-	SuccessRedirectURL string
+	SessionManager        *scs.SessionManager
+	NotFoundHandler       http.Handler
+	SuccessRedirectURL    string
+	BadRequestRedirectURL string
+}
+
+type ShelterRoleUpdater interface {
+	UpdateShelterRole(ctx context.Context, shelterID, userID string, newRole ShelterRole) error
 }
 
 func (d *DoShelterEditRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Method not implemented")
+	shelterID := r.PathValue("shelter_id")
+	targetEmail := r.URL.Query().Get("email")
+	if targetEmail == "" {
+		d.Log.Debug("Target id is a required parameter")
+		d.Error(w, r, "Target email is a required parameter.")
+		return
+	}
+
+	sessionUser := GetSessionUser(r.Context())
+	if sessionUser == nil {
+		d.Log.Debug("Unauthorized request.")
+		RenderClientErrorPage(d.PageTemplateRenderer, w, "Unauthorized request.")
+		return
+	}
+
+	d.Log.Debug("Getting shelter by id.", "shelter_id", shelterID)
+	shelter, err := d.ShelterGetter.GetShelterByID(r.Context(), shelterID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelter) {
+			d.Log.Debug("No shelter found with the given id", "shelter_id", shelterID)
+			d.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+		d.Log.Error("Unexpected error while getting shelter by id.", "shelter_id", shelter.ID)
+		RenderClientErrorPage(d.PageTemplateRenderer, w, "Something went wrong. Please try again later.")
+		return
+	}
+
+	d.Log.Debug("Getting shelter role associated by user.", "shelter_id", shelterID, "user_id", sessionUser.UserID)
+	role, err := d.ShelterRoleStore.GetShelterRoleByID(r.Context(), shelter.ID, sessionUser.UserID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelterRole) {
+			d.Log.Debug("No shelter role was found associated with this user.", "user_id", sessionUser.UserID, "shelter_id", shelterID)
+			RenderClientErrorPage(d.PageTemplateRenderer, w, "Unauthorized request.")
+			return
+		}
+
+		d.Log.Error("Unexpected error while getting shelter role by id.", "user_id", sessionUser.UserID, "shelter_id", shelter.ID)
+		RenderClientErrorPage(d.PageTemplateRenderer, w, "Something went wrong. Please try again later.")
+		return
+	}
+
+	if role != ShelterRoleAdmin && role != ShelterRoleSuperAdmin {
+		d.Log.Error("Unauthorized. Must be an admin or higher", "user_id", sessionUser.UserID, "shelter_id", shelter.ID, "role", role)
+		d.Error(w, r, "Unauthorized to manage shelter roles. Must be an admin or higher.")
+		return
+	}
+
+	targetRole, err := d.ShelterRoleStore.GetShelterRoleByEmail(r.Context(), shelterID, targetEmail)
+	if err != nil {
+		d.Log.Error("Unable to query for target's shelter role.", "reason", err.Error())
+		d.Error(w, r, "Something went wrong. Please try again later.")
+		return
+	}
+
+	if targetRole == ShelterRoleSuperAdmin {
+		d.Log.Error("Editing super admin's role is not allowed.")
+		d.Error(w, r, "Super Admin is not allowed to be edited this way.")
+		return
+	}
+
+	newRole := r.FormValue("role")
+	if !IsValidShelterRole(newRole) {
+		d.Log.Debug("Invalid role value.", "role", newRole)
+		err := d.PageTemplateRenderer.RenderPageTemplate(w, "shelter_role_edit.html", ShelterEditRolePage{
+			BasePage: BasePage{
+				SessionUser: sessionUser,
+			},
+			ShelterID:   shelterID,
+			ShelterName: shelter.Name,
+			Email:       targetEmail,
+			Role:        newRole,
+			RoleError:   "Invalid role value.",
+		})
+		if err != nil {
+			panic("unable to render shelter_edit_role.html template: " + err.Error())
+		}
+		return
+	}
+
+	d.Log.Debug("Updating shelter role.", "shelter_id", shelterID, "user_id", sessionUser.UserID, "target_email", targetEmail)
+	err = d.ShelterRoleStore.UpdateShelterRole(r.Context(), shelterID, targetEmail, ShelterRole(newRole))
+	if err != nil {
+		d.Log.Error("Unexpected error while updating shelter role.", "shelter_id", shelterID, "user_id", sessionUser.UserID, "target_email", targetEmail, "reason", err.Error())
+		d.Error(w, r, "Something went wrong. Please try again later.")
+		return
+	}
+
+	d.Log.Info("Successfully updated shelter role.", "shelter_id", shelterID, "user_id", sessionUser.UserID, "target_email", targetEmail)
+	flash := NewFlash("Successfully updated shelter role.", FlashLevelSuccess)
+	d.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
+
+	redirectURL := strings.ReplaceAll(d.SuccessRedirectURL, "{shelter_id}", shelterID)
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+}
+
+func (d *DoShelterEditRoleHandler) Error(w http.ResponseWriter, r *http.Request, message string) {
+	flash := NewFlash("Something went wrong. Please try again later.", FlashLevelError)
+	d.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
+
+	redirectURL := strings.ReplaceAll(d.BadRequestRedirectURL, "{shelter_id}", r.PathValue("shelter_id"))
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+}
+
+type ClientErrorPage struct {
+	BasePage
+	Message string
+}
+
+func RenderClientErrorPage(p PageTemplateRenderer, w http.ResponseWriter, message string) {
+	err := p.RenderPageTemplate(w, "error.html", ClientErrorPage{
+		Message: message,
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+func IsValidShelterRole(role string) bool {
+	return role == string(ShelterRoleAdmin) || role == string(ShelterRoleEditor) || role == string(ShelterRoleSuperAdmin)
 }

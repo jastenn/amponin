@@ -55,7 +55,7 @@ const month = time.Hour * 24 * 30
 
 func calculateAge(t time.Time) string {
 	var results []string
-	age := time.Now().Sub(t)
+	age := time.Since(t)
 
 	ageInYears := age / year
 	if ageInYears == 1 {

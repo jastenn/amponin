@@ -19,24 +19,21 @@
 			{{ .Message }}					
 		</div>
 		{{ end }}
-		<form method="post" action="/shelter/{{ .ShelterID }}/roles/edit{{ with .Form.Email -}} ?email={{ . }} {{- end }}" class="gap" aria-labelledby="shelter-edit-role-heading">
+		<form method="post" action="/shelter/{{ .ShelterID }}/roles/edit{{ with .Email -}} ?email={{ . }} {{- end }}" class="gap" aria-labelledby="shelter-edit-role-heading">
 			<div>
-				<label for="email" class="form-label">Email</label>	
-				<input id="email" name="email" type="text" value="{{ .Form.Email }}" readonly
+				<label for="role" class="form-label">Email</label>
+				<input id="email" name="email" type="text" value="{{ .Email }}" readonly
 					class="form-control"
 					aria-describedby="email-error">
-				{{ with index .Form.FieldErrors `email` }}
-					<small id="email-error" class="form-helper form-helper--error">{{ . }}</small>
-				{{ end }}
 			</div>
 			<div>
 				<label for="role" class="form-label">Role</label>
 				<select id="role" name="role" class="form-control">
-					<option value="" disabled {{ if eq .Form.Role `` }} selected {{ end }}>Select User's Role</option>	
-					<option value="admin" {{ if eq .Form.Role `admin` }} selected {{ end }}>Admin</option>	
-					<option value="editor" {{ if eq .Form.Role `editor` }} selected {{ end }}>Editor</option>	
+					<option value="" disabled {{ if eq .Role `` }} selected {{ end }}>Select User's Role</option>	
+					<option value="admin" {{ if eq .Role `admin` }} selected {{ end }}>Admin</option>	
+					<option value="editor" {{ if eq .Role `editor` }} selected {{ end }}>Editor</option>	
 				</select>
-				{{ with index .Form.FieldErrors `role` }} 
+				{{ with .RoleError }} 
 					<small class="form-helper form-helper--error"> {{ . }} </small>
 				{{ end }}
 			</div>

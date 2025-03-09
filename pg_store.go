@@ -201,7 +201,7 @@ func (p *PGStore) UpdateUserInfo(ctx context.Context, userID string, data UserIn
 func (p *PGStore) CreateShelter(ctx context.Context, userID string, data NewShelter) (*Shelter, error) {
 	tx, err := p.db.Begin()
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin transaction: " + err.Error())
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
@@ -610,7 +610,7 @@ func (p *PGStore) CreateShelterRole(ctx context.Context, data NewShelterRole) er
 			return ErrNoUser
 		}
 
-		return fmt.Errorf("unable to query users by email: " + err.Error())
+		return fmt.Errorf("unable to query users by email: %w", err)
 	}
 
 	_, err = tx.ExecContext(ctx,
@@ -651,7 +651,7 @@ func (p *PGStore) DeleteShelterRole(ctx context.Context, shelterID, email string
 			return ErrNoUser
 		}
 
-		return fmt.Errorf("unable to query users by email: " + err.Error())
+		return fmt.Errorf("unable to query users by email: %w", err)
 	}
 
 	_, err = tx.ExecContext(ctx,
@@ -661,6 +661,46 @@ func (p *PGStore) DeleteShelterRole(ctx context.Context, shelterID, email string
 	)
 	if err != nil {
 		return fmt.Errorf("unable to delete from shelter_roles: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("unable to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (p *PGStore) UpdateShelterRole(ctx context.Context, shelterID, email string, newRole ShelterRole) error {
+	tx, err := p.db.Begin()
+	if err != nil {
+		return fmt.Errorf("unable to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var userID string
+	err = tx.QueryRowContext(
+		ctx,
+		`SELECT user_id FROM users WHERE email = $1`,
+		email,
+	).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNoUser
+		}
+
+		return fmt.Errorf("unable to query users by email: %w", err)
+	}
+
+	_, err = tx.ExecContext(
+		ctx,
+		`UPDATE shelter_roles
+		 SET role = $1
+		 WHERE shelter_id = $2 AND user_id = $3`,
+		newRole, shelterID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("unable to update shelter role: %w", err)
 	}
 
 	err = tx.Commit()

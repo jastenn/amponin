@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -19,7 +18,7 @@ import (
 
 var (
 	ErrNoUser     = errors.New("no user found")
-	ErrEmailInUse = errors.New("email is already in use.")
+	ErrEmailInUse = errors.New("email is already in use")
 )
 
 type User struct {
@@ -46,7 +45,7 @@ type SignupHandler struct {
 	Log                  *slog.Logger
 	PageTemplateRenderer PageTemplateRenderer
 	SessionManager       *scs.SessionManager
-	SuccessRedirectURL  string
+	SuccessRedirectURL   string
 }
 
 func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -103,8 +102,6 @@ type DoSignupHandler struct {
 	MailSender              MailSender
 	VerificationRedirectURL string
 	LoggedInRedirectURL     string
-
-	signupTemplateCache *template.Template
 }
 
 func (d *DoSignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -352,7 +349,7 @@ type DoLoginHandler struct {
 	SuccessRedirectURL        string
 }
 
-var ErrNoLocalAccount = errors.New("no local account found.")
+var ErrNoLocalAccount = errors.New("no local account found")
 
 type LocalAccountGetterByEmail interface {
 	GetLocalAccountByEmail(ctx context.Context, email string) (*LocalAccount, *User, error)
@@ -499,14 +496,13 @@ type AccountSettingsHandler struct {
 	PageTemplateRenderer PageTemplateRenderer
 	SessionManager       *scs.SessionManager
 	UserGetterByID       UserGetterByID
-
-	accountSettingsTemplateCache *template.Template
 }
 
 func (a *AccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sessionUser := GetSessionUser(r.Context())
 	if sessionUser == nil {
 		BasicHTTPError(w, http.StatusUnauthorized)
+		return
 	}
 
 	user, err := a.UserGetterByID.GetUserByID(r.Context(), sessionUser.UserID)
@@ -519,9 +515,6 @@ func (a *AccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 				},
 				Flash: NewFlash("Something went wrong. Please try again later.", FlashLevelError),
 			})
-			if err != nil {
-				panic(err)
-			}
 			return
 		}
 
@@ -574,7 +567,7 @@ type EmailUpdateRequest struct {
 	CreatedAt    time.Time
 }
 
-var ErrNoEmailUpdateRequest = errors.New("no email update request found.")
+var ErrNoEmailUpdateRequest = errors.New("no email update request found")
 
 type NewEmailUpdateRequest struct {
 	UserID       string
@@ -603,8 +596,6 @@ type DoAccountHandler struct {
 	EmailUpdateRequestURL    *url.URL
 	EmailUpdateRequestMaxAge time.Duration
 	MailSender               MailSender
-
-	accountSettingsTemplateCache *template.Template
 }
 
 func (d *DoAccountHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

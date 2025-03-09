@@ -62,7 +62,9 @@ type SessionUser struct {
 	AvatarURL   *string
 }
 
-const ContextKeySessionUser = "context_key_session_user"
+type ContextKey string
+
+const ContextKeySessionUser ContextKey = "context_key_session_user"
 
 func GetSessionUser(ctx context.Context) *SessionUser {
 	user, ok := ctx.Value(ContextKeySessionUser).(*SessionUser)

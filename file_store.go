@@ -13,7 +13,7 @@ import (
 	nanoid "github.com/matoous/go-nanoid/v2"
 )
 
-var ErrFileExists = errors.New("file already exists.")
+var ErrFileExists = errors.New("file already exists")
 
 type FileStore interface {
 	Save(filepath string, file io.Reader) (url string, err error)
