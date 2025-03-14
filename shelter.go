@@ -1309,7 +1309,7 @@ func (s *ShelterEditRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	sessionUser := GetSessionUser(r.Context())
 	if sessionUser == nil {
 		s.Log.Debug("Unauthorized request.")
-		RenderClientErrorPage(s.PageTemplateRenderer, w, "Unauthorized request.")
+		RenderClientErrorPageV1(s.PageTemplateRenderer, w, "Unauthorized request.")
 		return
 	}
 
@@ -1322,7 +1322,7 @@ func (s *ShelterEditRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		s.Log.Error("Unexpected error while getting shelter by id.", "shelter_id", shelter.ID)
-		RenderClientErrorPage(s.PageTemplateRenderer, w, "Something went wrong. Please try again later.")
+		RenderClientErrorPageV1(s.PageTemplateRenderer, w, "Something went wrong. Please try again later.")
 		return
 	}
 
@@ -1331,12 +1331,12 @@ func (s *ShelterEditRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		if errors.Is(err, ErrNoShelterRole) {
 			s.Log.Debug("No shelter role was found associated with this user.", "user_id", sessionUser.UserID, "shelter_id", shelterID)
-			RenderClientErrorPage(s.PageTemplateRenderer, w, "Unauthorized request.")
+			RenderClientErrorPageV1(s.PageTemplateRenderer, w, "Unauthorized request.")
 			return
 		}
 
 		s.Log.Error("Unexpected error while getting shelter role by id.", "user_id", sessionUser.UserID, "shelter_id", shelter.ID)
-		RenderClientErrorPage(s.PageTemplateRenderer, w, "Something went wrong. Please try again later.")
+		RenderClientErrorPageV1(s.PageTemplateRenderer, w, "Something went wrong. Please try again later.")
 		return
 	}
 
@@ -1420,7 +1420,7 @@ func (d *DoShelterEditRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	sessionUser := GetSessionUser(r.Context())
 	if sessionUser == nil {
 		d.Log.Debug("Unauthorized request.")
-		RenderClientErrorPage(d.PageTemplateRenderer, w, "Unauthorized request.")
+		RenderClientErrorPageV1(d.PageTemplateRenderer, w, "Unauthorized request.")
 		return
 	}
 
@@ -1433,7 +1433,7 @@ func (d *DoShelterEditRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		d.Log.Error("Unexpected error while getting shelter by id.", "shelter_id", shelter.ID)
-		RenderClientErrorPage(d.PageTemplateRenderer, w, "Something went wrong. Please try again later.")
+		RenderClientErrorPageV1(d.PageTemplateRenderer, w, "Something went wrong. Please try again later.")
 		return
 	}
 
@@ -1442,12 +1442,12 @@ func (d *DoShelterEditRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		if errors.Is(err, ErrNoShelterRole) {
 			d.Log.Debug("No shelter role was found associated with this user.", "user_id", sessionUser.UserID, "shelter_id", shelterID)
-			RenderClientErrorPage(d.PageTemplateRenderer, w, "Unauthorized request.")
+			RenderClientErrorPageV1(d.PageTemplateRenderer, w, "Unauthorized request.")
 			return
 		}
 
 		d.Log.Error("Unexpected error while getting shelter role by id.", "user_id", sessionUser.UserID, "shelter_id", shelter.ID)
-		RenderClientErrorPage(d.PageTemplateRenderer, w, "Something went wrong. Please try again later.")
+		RenderClientErrorPageV1(d.PageTemplateRenderer, w, "Something went wrong. Please try again later.")
 		return
 	}
 
@@ -1553,22 +1553,8 @@ func (d *DoShelterEditRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
 
-type ClientErrorPage struct {
-	BasePage
-	Message string
-}
-
 func RenderShelterRoleEditPage(p PageTemplateRenderer, w http.ResponseWriter, data ShelterRoleEditPage) {
 	err := p.RenderPageTemplate(w, "shelter_role_edit.html", data)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func RenderClientErrorPage(p PageTemplateRenderer, w http.ResponseWriter, message string) {
-	err := p.RenderPageTemplate(w, "error.html", ClientErrorPage{
-		Message: message,
-	})
 	if err != nil {
 		panic(err)
 	}

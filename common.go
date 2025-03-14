@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"embed"
 	"errors"
 	"fmt"
 	"html/template"
@@ -98,6 +99,8 @@ func GenerateVerificationCode() string {
 	return nanoid.MustGenerate("abcdefghijklmnopqrstuvwxyz1234567890", 6)
 }
 
+var ErrUnexpectedFileType = errors.New("file from form has an unexpected file type")
+
 func FormImage(r *http.Request, key string) (data []byte, filename string, err error) {
 	f, fheader, err := r.FormFile(key)
 	if err != nil {
@@ -157,4 +160,37 @@ func IsImage(b []byte) bool {
 
 func BasicHTTPError(w http.ResponseWriter, status int) {
 	http.Error(w, http.StatusText(status), status)
+}
+
+type ClientErrorPage struct {
+	BasePage
+	Message string
+}
+
+func RenderClientErrorPageV1(p PageTemplateRenderer, w http.ResponseWriter, message string) {
+	err := p.RenderPageTemplate(w, "error.html", ClientErrorPage{
+		Message: message,
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+//go:embed templates/error.html templates/base.html
+var clientErrorTemplateFS embed.FS
+
+var clientErrorTemplate = template.Must(template.ParseFS(clientErrorTemplateFS, "templates/error.html", "templates/base.html"))
+
+func RenderClientErrorPageV2(w http.ResponseWriter, status int, message string) {
+	var b bytes.Buffer
+	err := clientErrorTemplate.ExecuteTemplate(&b, "base.html", ClientErrorPage{
+		Message: message,
+	})
+	if err != nil {
+		panic("unable to execute client error template: " + err.Error())
+	}
+
+	w.WriteHeader(status)
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(b.Bytes())
 }

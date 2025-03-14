@@ -89,12 +89,6 @@ func main() {
 
 	pageTemplateRenderer := NewFSPageTemplateRenderer(templatesFS)
 
-	mailTemplateFS, err := fs.Sub(templatesFS, "mail")
-	if err != nil {
-		panic("unable to extract mail templates from embedded fs: " + err.Error())
-	}
-	mailTemplateRenderer := NewFSMailTemplateRenderer(mailTemplateFS)
-
 	postgresDataStore := &PGStore{
 		db: databaseConnection,
 	}
@@ -130,41 +124,35 @@ func main() {
 		NotFoundHandler:      notfoundHandler,
 	})
 	mux.Handle("GET /signup", &SignupHandler{
-		Log:                  log.With("path", "GET /signup"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		SuccessRedirectURL:   "/",
+		Log:                log.With("path", "GET /signup"),
+		SessionManager:     sessionManager,
+		SuccessRedirectURL: "/",
 	})
 	mux.Handle("POST /signup", &DoSignupHandler{
 		Log:                     log.With("path", "POST /signup"),
-		PageTemplateRenderer:    pageTemplateRenderer,
 		SessionManager:          sessionManager,
 		MailSender:              googleEmailSender,
 		VerificationRedirectURL: "/signup/verification",
 	})
-	mux.Handle("GET /signup/verification", &SignupCompletionHandler{
-		Log:                  log.With("path", "GET /signup/verification"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		SignupRedirectURL:    "/signup",
+	mux.Handle("GET /signup/verification", &SignupVerificationHandler{
+		Log:               log.With("path", "GET /signup/verification"),
+		SessionManager:    sessionManager,
+		SignupRedirectURL: "/signup",
 	})
-	mux.Handle("POST /signup/verification", &DoSignupCompletionHandler{
-		Log:                  log.With("path", "POST /signup/verification"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		LocalAccountCreator:  postgresDataStore,
-		SignupRedirectURL:    "/signup",
-		SucccessRedirectURL:  "/login",
+	mux.Handle("POST /signup/verification", &DoSignupVerificatinoHandler{
+		Log:                 log.With("path", "POST /signup/verification"),
+		SessionManager:      sessionManager,
+		LocalAccountCreator: postgresDataStore,
+		SignupRedirectURL:   "/signup",
+		SucccessRedirectURL: "/login",
 	})
 	mux.Handle("GET /login", &LoginHandler{
-		Log:                  log.With("path", "GET /login"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
-		SuccessRedirectURL:   "/",
+		Log:                log.With("path", "GET /login"),
+		SessionManager:     sessionManager,
+		SuccessRedirectURL: "/",
 	})
 	mux.Handle("POST /login", &DoLoginHandler{
 		Log:                       log.With("path", "POST /login"),
-		PageTemplateRenderer:      pageTemplateRenderer,
 		SessionManager:            sessionManager,
 		SuccessRedirectURL:        "/",
 		LoginSessionMaxAge:        time.Hour * 24 * 7,
@@ -175,17 +163,14 @@ func main() {
 		SessionManager: sessionManager,
 	})
 	mux.Handle("GET /account",
-		authorizedSessionUserMiddleware.Apply(&AccountSettingsHandler{
-			Log:                  log.With("path", "GET /account"),
-			PageTemplateRenderer: pageTemplateRenderer,
-			SessionManager:       sessionManager,
-			UserGetterByID:       postgresDataStore,
+		authorizedSessionUserMiddleware.Apply(&AccountHandler{
+			Log:            log.With("path", "GET /account"),
+			SessionManager: sessionManager,
+			UserGetterByID: postgresDataStore,
 		}),
 	)
 	mux.Handle("POST /account",
 		authorizedSessionUserMiddleware.Apply(&DoAccountHandler{
-			PageTemplateRenderer:      pageTemplateRenderer,
-			MailRenderer:              mailTemplateRenderer,
 			Log:                       log.With("path", "POST /account"),
 			SessionManager:            sessionManager,
 			UserStore:                 postgresDataStore,
@@ -203,17 +188,15 @@ func main() {
 		}),
 	)
 	mux.Handle("GET /account/email-update",
-		authorizedSessionUserMiddleware.Apply(&AccountEmailUpdateHandler{
+		authorizedSessionUserMiddleware.Apply(&EmailUpdateHandler{
 			Log:                      log.With("path", "GET /account/email-update"),
-			PageTemplateRenderer:     pageTemplateRenderer,
 			SessionManager:           sessionManager,
 			EmailUpdateRequestGetter: postgresDataStore,
 		}),
 	)
 	mux.Handle("POST /account/email-update",
-		authorizedSessionUserMiddleware.Apply(&DoAccountEmailUpdateHandler{
+		authorizedSessionUserMiddleware.Apply(&DoEmailUpdateHandler{
 			Log:                       log.With("path", "POST /account/email-update"),
-			PageTemplateRenderer:      pageTemplateRenderer,
 			SessionManager:            sessionManager,
 			EmailUpdateRequestStore:   postgresDataStore,
 			LocalAccountGetterByEmail: postgresDataStore,
@@ -222,15 +205,13 @@ func main() {
 		}),
 	)
 	mux.Handle("GET /account/email-update/verification", &EmailUpdateVerificationHandler{
-		Log:                  log.With("path", "GET /account/email-update/verification"),
-		PageTemplateRenderer: pageTemplateRenderer,
-		SessionManager:       sessionManager,
+		Log:            log.With("path", "GET /account/email-update/verification"),
+		SessionManager: sessionManager,
 	})
 	mux.Handle("POST /account/email-update/verification", &DoEmailUpdateVerficationHandler{
-		Log:                  log.With("path", "POST /account/email-update/verification"),
-		SessionManager:       sessionManager,
-		PageTemplateRenderer: pageTemplateRenderer,
-		UserInfoUpdater:      postgresDataStore,
+		Log:             log.With("path", "POST /account/email-update/verification"),
+		SessionManager:  sessionManager,
+		UserInfoUpdater: postgresDataStore,
 	})
 	mux.Handle("GET /shelter",
 		authorizedSessionUserMiddleware.Apply(&ShelterHandler{

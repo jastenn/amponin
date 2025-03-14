@@ -31,7 +31,7 @@
 						<div>
 							<label class="form-label">Avatar</label>
 							<input type="file" name="avatar">
-							{{ with index .GeneralUpdateForm.FieldErrors `avatar` }}
+							{{ with .GeneralUpdateForm.Errors.Avatar }}
 								<small class="form-helper form-helper--error">{{ . }}</small>
 							{{ end }}
 						</div>
@@ -39,7 +39,7 @@
 							<label for="display-name" class="form-label">Display Name</label>	
 							<input id="display-name" type="text" name="display-name" value="{{ .GeneralUpdateForm.DisplayName }}"
 								class="form-control">
-							{{ with index .GeneralUpdateForm.FieldErrors `display-name` }}
+							{{ with .GeneralUpdateForm.Errors.DisplayName }}
 								<small class="form-helper form-helper--error">{{ . }}</small>
 							{{ end }}
 						</div>
@@ -98,7 +98,7 @@
 							<label for="current-password" class="form-label">Current Password</label>	
 							<input id="current-password" type="password" name="current-password" value="{{ .PasswordUpdateForm.CurrentPassword }}"
 								class="form-control">
-							{{ with index .PasswordUpdateForm.FieldErrors `current-password` }}
+							{{ with .PasswordUpdateForm.Errors.CurrentPassword }}
 								<small class="form-helper form-helper--error">{{ . }}</small>
 							{{ end }}
 						</div>
@@ -106,7 +106,7 @@
 							<label for="new-password" class="form-label">New Password</label>	
 							<input id="new-password" type="password" name="new-password" value="{{ .PasswordUpdateForm.NewPassword }}"
 								class="form-control">
-							{{ with index .PasswordUpdateForm.FieldErrors `new-password` }}
+							{{ with index .PasswordUpdateForm.Errors.NewPassword }}
 								<small class="form-helper form-helper--error">{{ . }}</small>
 							{{ end }}
 						</div>
@@ -114,7 +114,7 @@
 							<label for="confirm-password" class="form-label">Confirm Password</label>	
 							<input id="confirm-password" type="password" name="confirm-password" value="{{ .PasswordUpdateForm.ConfirmPassword }}"
 								class="form-control">
-							{{ with index .PasswordUpdateForm.FieldErrors `confirm-password`  }} 
+							{{ with index .PasswordUpdateForm.Errors.ConfirmPassword  }} 
 								<small class="form-helper form-helper--error">{{ . }}</small>
 							{{ end }}
 						</div>

@@ -23,7 +23,7 @@
 					value="{{ .Form.DisplayName }}"
 					class="form-control"
 					aria-describedby="display-name-error">
-				{{ with index .Form.FieldErrors `display-name` }}
+				{{ with .Form.Errors.DisplayName }}
 					<small id="display-name-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
@@ -33,7 +33,7 @@
 					value="{{ .Form.Email }}"
 					class="form-control"
 					aria-describedby="email-error">
-				{{ with index .Form.FieldErrors `email` }}
+				{{ with .Form.Errors.Email }}
 					<small id="email-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
@@ -43,7 +43,7 @@
 					value="{{ .Form.Password }}"
 					class="form-control"
 					aria-describedby="password-error">
-				{{ with index .Form.FieldErrors `password` }}
+				{{ with .Form.Errors.Password }}
 					<small id="password-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
@@ -53,7 +53,7 @@
 					value="{{ .Form.ConfirmPassword }}"
 					class="form-control"
 					aria-describedby="confirm-password-error">
-				{{ with index .Form.FieldErrors `confirm-password` }}
+				{{ with .Form.Errors.ConfirmPassword }}
 					<small id="confirm-password-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>

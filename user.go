@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"embed"
 	"errors"
 	"fmt"
+	"html/template"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
@@ -41,11 +43,83 @@ func (l *LocalAccount) ComparePassword(password string) error {
 	return bcrypt.CompareHashAndPassword(l.PasswordHash, []byte(password))
 }
 
+type SignupPageData struct {
+	SessionUser *SessionUser
+	Flash       *Flash
+	Form        SignupForm
+}
+
+type SignupForm struct {
+	DisplayName     string
+	Email           string
+	Password        string
+	ConfirmPassword string
+	Errors          SignupFormErrors
+}
+
+type SignupFormErrors struct {
+	DisplayName     string
+	Email           string
+	Password        string
+	ConfirmPassword string
+}
+
+func ValidateSignupForm(form SignupForm) (valid bool, errors SignupFormErrors) {
+	if form.DisplayName == "" {
+		errors.DisplayName = "Please fill out this field."
+	} else if len(form.DisplayName) < 1 {
+		errors.DisplayName = "Value is too short."
+	} else if len(form.DisplayName) > 16 {
+		errors.DisplayName = "Value is too long. It must not exceed 16 characters long."
+	}
+
+	if form.Email == "" {
+		errors.Email = "Please fill out this field."
+	} else if IsInvalidEmail(form.Email) {
+		errors.Email = "Value is invalid email."
+	}
+
+	if form.Password == "" {
+		errors.Password = "Please fill out this field."
+	} else if len(form.Password) < 8 {
+		errors.Password = "Value is too short. It must be at least 8 characters long."
+	} else if len(form.Password) > 32 {
+		errors.Password = "Value is too long. It must not exceed 32 characters long."
+	}
+
+	if form.ConfirmPassword == "" {
+		errors.ConfirmPassword = "Please fill out this field."
+	} else if form.ConfirmPassword != form.Password {
+		errors.ConfirmPassword = "Value doesn't match the password."
+	}
+
+	if errors.DisplayName != "" || errors.Email != "" || errors.Password != "" || errors.ConfirmPassword != "" {
+		return false, errors
+	}
+
+	return true, SignupFormErrors{}
+}
+
+//go:embed templates/signup.html templates/base.html
+var signupTemplateFS embed.FS
+var signupTemplate = template.Must(template.ParseFS(signupTemplateFS, "templates/signup.html", "templates/base.html"))
+
+func RenderSignupPage(w http.ResponseWriter, status int, data SignupPageData) {
+	var b bytes.Buffer
+	err := signupTemplate.ExecuteTemplate(&b, "base.html", data)
+	if err != nil {
+		panic("unable to execute signup template: " + err.Error())
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(status)
+	w.Write(b.Bytes())
+}
+
 type SignupHandler struct {
-	Log                  *slog.Logger
-	PageTemplateRenderer PageTemplateRenderer
-	SessionManager       *scs.SessionManager
-	SuccessRedirectURL   string
+	Log                *slog.Logger
+	SessionManager     *scs.SessionManager
+	SuccessRedirectURL string
 }
 
 func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -60,48 +134,33 @@ func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	flash, _ := PopSessionFlash(s.SessionManager, r.Context())
-	r, _ = http.NewRequest(r.Method, r.URL.String(), nil)
-	err := s.PageTemplateRenderer.RenderPageTemplate(w, "signup.html", SignupPage{
+	RenderSignupPage(w, http.StatusOK, SignupPageData{
 		Flash: flash,
-		Form:  NewSignupForm(r),
 	})
-	if err != nil {
-		panic("unable to execute signup template: " + err.Error())
-	}
-}
 
-type SignupPage struct {
-	BasePage
-	Flash *Flash
-	Form  SignupForm
-}
-
-type SignupForm struct {
-	DisplayName     string
-	Email           string
-	Password        string
-	ConfirmPassword string
-
-	*FieldValidation
-}
-
-func NewSignupForm(r *http.Request) SignupForm {
-	return SignupForm{
-		DisplayName:     r.FormValue("display-name"),
-		Email:           r.FormValue("email"),
-		Password:        r.FormValue("password"),
-		ConfirmPassword: r.FormValue("confirm-password"),
-		FieldValidation: NewFieldValidation(),
-	}
 }
 
 type DoSignupHandler struct {
 	Log                     *slog.Logger
-	PageTemplateRenderer    PageTemplateRenderer
 	SessionManager          *scs.SessionManager
 	MailSender              MailSender
 	VerificationRedirectURL string
 	LoggedInRedirectURL     string
+}
+
+type MailSender interface {
+	SendMail(ctx context.Context, email string, msg []byte) error
+}
+
+const (
+	SessionKeySignupValues = "signup_values"
+)
+
+type SessionSignupValues struct {
+	DisplayName      string
+	Email            string
+	Password         string
+	VerificationCode string
 }
 
 func (d *DoSignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -114,29 +173,21 @@ func (d *DoSignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	form := NewSignupForm(r)
+	form := SignupForm{
+		DisplayName:     r.FormValue("display-name"),
+		Email:           r.FormValue("email"),
+		Password:        r.FormValue("password"),
+		ConfirmPassword: r.FormValue("confirm-password"),
+	}
 
-	form.Check(form.DisplayName == "", "display-name", "Please fill out this field")
-	form.Check(len(form.DisplayName) == 1, "display-name", "Value is too short.")
-	form.Check(len(form.DisplayName) > 18, "display-name", "Value is too long. It must not exceed 16 characters long.")
-	form.Check(form.Email == "", "email", "Please fill out this field.")
-	form.Check(IsInvalidEmail(form.Email), "email", "Value is invalid email.")
-	form.Check(form.Password == "", "password", "Please fill out this field.")
-	form.Check(len(form.Password) < 8, "password", "Value is too short. It must be at least 8 characters long.")
-	form.Check(len(form.Password) > 32, "password", "Value is too long. It must not exceed 32 characters long.")
-	form.Check(form.ConfirmPassword == "", "confirm-password", "Please fill out this field.")
-	form.Check(form.ConfirmPassword != form.Password, "confirm-password", "Value doesn't match the password")
-
-	if !form.Valid() {
-		d.Log.Debug("Form validation failed.", "field_errors", form.FieldErrors)
+	if valid, errors := ValidateSignupForm(form); !valid {
+		form.Errors = errors
+		d.Log.Debug("Form validation failed.", "field_errors", errors)
 
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		err := d.PageTemplateRenderer.RenderPageTemplate(w, "signup.html", SignupPage{
+		RenderSignupPage(w, http.StatusOK, SignupPageData{
 			Form: form,
 		})
-		if err != nil {
-			panic(err)
-		}
 		return
 	}
 
@@ -166,25 +217,37 @@ func (d *DoSignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, d.VerificationRedirectURL, http.StatusSeeOther)
 }
 
-const (
-	SessionKeySignupValues = "signup_values"
-)
-
-type SessionSignupValues struct {
-	DisplayName      string
-	Email            string
-	Password         string
-	VerificationCode string
+type SignupVerificationPageData struct {
+	BasePage
+	Flash                 *Flash
+	Email                 string
+	VerificationCode      string
+	VerificationCodeError string
 }
 
-type SignupCompletionHandler struct {
-	Log                  *slog.Logger
-	PageTemplateRenderer PageTemplateRenderer
-	SessionManager       *scs.SessionManager
-	SignupRedirectURL    string
+//go:embed templates/signup_verification.html templates/base.html
+var signupVerificationTemplateFS embed.FS
+var signupVerificationTemplate = template.Must(template.ParseFS(signupVerificationTemplateFS, "templates/signup_verification.html", "templates/base.html"))
+
+func RenderSignupVerificationPage(w http.ResponseWriter, status int, data SignupVerificationPageData) {
+	var b bytes.Buffer
+	err := signupVerificationTemplate.ExecuteTemplate(&b, "base.html", data)
+	if err != nil {
+		panic("unable to execute signup verification template: " + err.Error())
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(status)
+	w.Write(b.Bytes())
 }
 
-func (d *SignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+type SignupVerificationHandler struct {
+	Log               *slog.Logger
+	SessionManager    *scs.SessionManager
+	SignupRedirectURL string
+}
+
+func (d *SignupVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sessionSignupData, ok := d.SessionManager.Get(r.Context(), SessionKeySignupValues).(*SessionSignupValues)
 	if !ok {
 		d.Log.Debug("User haven't started the signup process. No signup values was found.")
@@ -193,27 +256,15 @@ func (d *SignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	err := d.PageTemplateRenderer.RenderPageTemplate(w, "signup_verification.html", SignupCompletionPage{
+	RenderSignupVerificationPage(w, http.StatusOK, SignupVerificationPageData{
 		Email: sessionSignupData.Email,
 	})
-	if err != nil {
-		panic(err)
-	}
 }
 
-type SignupCompletionPage struct {
-	BasePage
-	Flash                 *Flash
-	Email                 string
-	VerificationCode      string
-	VerificationCodeError string
-}
-
-type DoSignupCompletionHandler struct {
-	PageTemplateRenderer PageTemplateRenderer
-	Log                  *slog.Logger
-	SessionManager       *scs.SessionManager
-	LocalAccountCreator  interface {
+type DoSignupVerificatinoHandler struct {
+	Log                 *slog.Logger
+	SessionManager      *scs.SessionManager
+	LocalAccountCreator interface {
 		CreateLocalAccount(ctx context.Context, data NewLocalAccount) (*LocalAccount, *User, error)
 	}
 	SignupRedirectURL   string
@@ -227,7 +278,7 @@ type NewLocalAccount struct {
 	AvatarURL    *string
 }
 
-func (d *DoSignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (d *DoSignupVerificatinoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	verificationCode := r.FormValue("code")
 	sessionSignupData, ok := d.SessionManager.Get(r.Context(), SessionKeySignupValues).(*SessionSignupValues)
 	if !ok {
@@ -240,14 +291,11 @@ func (d *DoSignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 
 	if verificationCode != sessionSignupData.VerificationCode {
 		d.Log.Debug("Signup email verification code mismatch.", "email", sessionSignupData.Email, "code", verificationCode)
-		err := d.PageTemplateRenderer.RenderPageTemplate(w, "signup_verification.html", SignupCompletionPage{
+		RenderSignupVerificationPage(w, http.StatusOK, SignupVerificationPageData{
 			Email:                 sessionSignupData.Email,
 			VerificationCode:      verificationCode,
 			VerificationCodeError: "Verification code is invalid.",
 		})
-		if err != nil {
-			panic(err)
-		}
 		return
 	}
 
@@ -288,11 +336,44 @@ func (d *DoSignupCompletionHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	http.Redirect(w, r, d.SucccessRedirectURL, http.StatusSeeOther)
 }
 
+type LoginPageData struct {
+	SessionUser *SessionUser
+	Flash       *Flash
+	CallbackURL string
+	Form        LoginForm
+}
+
+type LoginForm struct {
+	Email    string
+	Password string
+	Errors   LoginFormErrors
+}
+
+type LoginFormErrors struct {
+	Email    string
+	Password string
+}
+
+//go:embed templates/login.html templates/base.html
+var loginTemplateFS embed.FS
+var loginTemplate = template.Must(template.ParseFS(loginTemplateFS, "templates/login.html", "templates/base.html"))
+
+func RenderLoginPage(w http.ResponseWriter, status int, data LoginPageData) {
+	var b bytes.Buffer
+	err := loginTemplate.ExecuteTemplate(&b, "base.html", data)
+	if err != nil {
+		panic("unable to execute login template: " + err.Error())
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(status)
+	w.Write(b.Bytes())
+}
+
 type LoginHandler struct {
-	Log                  *slog.Logger
-	PageTemplateRenderer PageTemplateRenderer
-	SessionManager       *scs.SessionManager
-	SuccessRedirectURL   string
+	Log                *slog.Logger
+	SessionManager     *scs.SessionManager
+	SuccessRedirectURL string
 }
 
 func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -305,44 +386,33 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	callbackURL := r.FormValue("callback")
 	flash, _ := PopSessionFlash(l.SessionManager, r.Context())
-	r, _ = http.NewRequest(r.Method, r.URL.String(), nil)
-	err := l.PageTemplateRenderer.RenderPageTemplate(w, "login.html", LoginPage{
+	RenderLoginPage(w, http.StatusOK, LoginPageData{
 		Flash:       flash,
-		CallbackURL: callbackURL,
-		Form:        NewLoginForm(r),
+		CallbackURL: r.FormValue("callback"),
 	})
-	if err != nil {
-		panic("unable to execute login template: " + err.Error())
+}
+
+func ValidateLoginForm(form LoginForm) (valid bool, errors LoginFormErrors) {
+	if form.Email == "" {
+		errors.Email = "Please fill out this field."
+	} else if IsInvalidEmail(form.Email) {
+		errors.Email = "Value is invalid email."
 	}
-}
 
-type LoginPage struct {
-	BasePage
-	Flash       *Flash
-	CallbackURL string
-	Form        LoginForm
-}
-
-type LoginForm struct {
-	Email    string
-	Password string
-
-	*FieldValidation
-}
-
-func NewLoginForm(r *http.Request) LoginForm {
-	return LoginForm{
-		Email:           r.FormValue("email"),
-		Password:        r.FormValue("password"),
-		FieldValidation: NewFieldValidation(),
+	if form.Password == "" {
+		errors.Password = "Please fill out this field."
 	}
+
+	if errors.Email != "" || errors.Password != "" {
+		return false, errors
+	}
+
+	return true, LoginFormErrors{}
 }
 
 type DoLoginHandler struct {
 	Log                       *slog.Logger
-	PageTemplateRenderer      PageTemplateRenderer
 	SessionManager            *scs.SessionManager
 	LocalAccountGetterByEmail LocalAccountGetterByEmail
 	LoginSessionMaxAge        time.Duration
@@ -357,15 +427,18 @@ type LocalAccountGetterByEmail interface {
 
 func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	callbackURL := r.URL.Query().Get("callback")
-	loginForm := NewLoginForm(r)
 
-	loginForm.Check(loginForm.Email == "", "email", "Please fill out this field.")
-	loginForm.Check(IsInvalidEmail(loginForm.Email), "email", "Value is invalid email.")
-	loginForm.Check(loginForm.Password == "", "password", "Please fill out this field.")
+	loginForm := LoginForm{
+		Email:    r.FormValue("email"),
+		Password: r.FormValue("password"),
+	}
 
-	if !loginForm.Valid() {
-		d.Log.Debug("Login validation failed.", "field_errors", loginForm.FieldErrors)
-		d.RenderPage(w, LoginPage{Form: loginForm})
+	if valid, errors := ValidateLoginForm(loginForm); !valid {
+		loginForm.Errors = errors
+		RenderLoginPage(w, http.StatusUnprocessableEntity, LoginPageData{
+			CallbackURL: callbackURL,
+			Form:        loginForm,
+		})
 		return
 	}
 
@@ -373,7 +446,7 @@ func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrNoLocalAccount) {
 			d.Log.Debug("No local account is associated with the email provided.", "email", loginForm.Email)
-			d.RenderPage(w, LoginPage{
+			RenderLoginPage(w, http.StatusUnprocessableEntity, LoginPageData{
 				CallbackURL: callbackURL,
 				Flash:       NewFlash("Incorrect email or password.", FlashLevelError),
 				Form:        loginForm,
@@ -382,7 +455,7 @@ func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		d.Log.Error("Unable to get local account.", "reason", err.Error())
-		d.RenderPage(w, LoginPage{
+		RenderLoginPage(w, http.StatusInternalServerError, LoginPageData{
 			CallbackURL: callbackURL,
 			Flash:       NewFlash("Something went wrong. Please try again later.", FlashLevelError),
 			Form:        loginForm,
@@ -393,7 +466,7 @@ func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	err = bcrypt.CompareHashAndPassword(localAccount.PasswordHash, []byte(loginForm.Password))
 	if err != nil {
 		d.Log.Debug("Failed to login. Incorrect password", "email", loginForm.Email)
-		d.RenderPage(w, LoginPage{
+		RenderLoginPage(w, http.StatusUnprocessableEntity, LoginPageData{
 			CallbackURL: callbackURL,
 			Flash:       NewFlash("Incorrect email or password.", FlashLevelError),
 			Form:        loginForm,
@@ -412,13 +485,6 @@ func (d *DoLoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
 
 	http.Redirect(w, r, cmp.Or(callbackURL, d.SuccessRedirectURL), http.StatusSeeOther)
-}
-
-func (d *DoLoginHandler) RenderPage(w http.ResponseWriter, data LoginPage) {
-	err := d.PageTemplateRenderer.RenderPageTemplate(w, "login.html", data)
-	if err != nil {
-		panic(err)
-	}
 }
 
 type DoLogout struct {
@@ -443,8 +509,8 @@ func (d *DoLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, d.SuccessRedirect, http.StatusSeeOther)
 }
 
-type AccountSettingsPage struct {
-	BasePage
+type AccountPageData struct {
+	SessionUser        *SessionUser
 	Flash              *Flash
 	User               *User
 	Focus              string
@@ -454,99 +520,108 @@ type AccountSettingsPage struct {
 
 type AccountGeneralUpdateForm struct {
 	DisplayName string
-
-	*FieldValidation
+	Errors      AccountGeneralUpdateFormError
 }
 
-func NewAccountGeneralUpdateForm() AccountGeneralUpdateForm {
-	return AccountGeneralUpdateForm{
-		FieldValidation: NewFieldValidation(),
-	}
+type AccountGeneralUpdateFormError struct {
+	Avatar      string
+	DisplayName string
 }
 
 type AccountPasswordUpdateForm struct {
 	CurrentPassword string
 	NewPassword     string
 	ConfirmPassword string
-
-	*FieldValidation
+	Errors          AccountPasswordUpdateFormErrors
 }
 
-func NewAccountPasswordUpdateForm() AccountPasswordUpdateForm {
-	return AccountPasswordUpdateForm{
-		FieldValidation: NewFieldValidation(),
-	}
+type AccountPasswordUpdateFormErrors struct {
+	CurrentPassword string
+	NewPassword     string
+	ConfirmPassword string
 }
 
-func NewAccountPasswordUpdateFormFromRequest(r *http.Request) AccountPasswordUpdateForm {
-	return AccountPasswordUpdateForm{
-		CurrentPassword: r.FormValue("current-password"),
-		NewPassword:     r.FormValue("new-password"),
-		ConfirmPassword: r.FormValue("confirm-password"),
-		FieldValidation: NewFieldValidation(),
+func ValidateAccountPasswordUpdateForm(form AccountPasswordUpdateForm) (valid bool, errors AccountPasswordUpdateFormErrors) {
+	if form.CurrentPassword == "" {
+		errors.CurrentPassword = "Please fill out this field."
 	}
+
+	if form.NewPassword == "" {
+		errors.NewPassword = "Please fill out this field."
+	} else if len(form.NewPassword) < 8 {
+		errors.NewPassword = "Value is too short. It must be at least 8 characters long."
+	} else if len(form.NewPassword) > 32 {
+		errors.NewPassword = "Value is too long. It must not exceed 32 characters long."
+	}
+
+	if form.ConfirmPassword == "" {
+		errors.ConfirmPassword = "Please fill out this field."
+	} else if form.ConfirmPassword != form.NewPassword {
+		errors.ConfirmPassword = "Value doesn't match the password."
+	}
+
+	if errors.CurrentPassword != "" || errors.NewPassword != "" || errors.ConfirmPassword != "" {
+		return false, errors
+	}
+
+	return true, AccountPasswordUpdateFormErrors{}
+}
+
+//go:embed templates/account.html templates/base.html
+var accountTemplateFS embed.FS
+var accountTemplate = template.Must(template.ParseFS(accountTemplateFS, "templates/account.html", "templates/base.html"))
+
+func RenderAccountPage(w http.ResponseWriter, status int, data AccountPageData) {
+	var b bytes.Buffer
+	err := accountTemplate.ExecuteTemplate(&b, "base.html", data)
+	if err != nil {
+		panic("unable to execute account template: " + err.Error())
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(status)
+	w.Write(b.Bytes())
+}
+
+type AccountHandler struct {
+	Log            *slog.Logger
+	SessionManager *scs.SessionManager
+	UserGetterByID UserGetterByID
 }
 
 type UserGetterByID interface {
 	GetUserByID(ctx context.Context, userID string) (*User, error)
 }
 
-type AccountSettingsHandler struct {
-	Log                  *slog.Logger
-	PageTemplateRenderer PageTemplateRenderer
-	SessionManager       *scs.SessionManager
-	UserGetterByID       UserGetterByID
-}
-
-func (a *AccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (a *AccountHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sessionUser := GetSessionUser(r.Context())
 	if sessionUser == nil {
-		BasicHTTPError(w, http.StatusUnauthorized)
+		RenderClientErrorPageV2(w, http.StatusUnauthorized, "You must be logged in to access this page.")
 		return
 	}
 
 	user, err := a.UserGetterByID.GetUserByID(r.Context(), sessionUser.UserID)
 	if err != nil {
+		a.SessionManager.Remove(r.Context(), SessionKeyUser)
+
 		if errors.Is(err, ErrNoUser) {
-			a.Log.Debug("User no longer exists.", "user_id", sessionUser.UserID)
-			a.RenderPage(w, AccountSettingsPage{
-				BasePage: BasePage{
-					SessionUser: sessionUser,
-				},
-				Flash: NewFlash("Something went wrong. Please try again later.", FlashLevelError),
-			})
+			RenderClientErrorPageV2(w, http.StatusUnprocessableEntity, "You must be logged in to access this page.")
 			return
 		}
 
 		a.Log.Error("Unable to get user by its id.", "reason", err.Error())
-		a.RenderPage(w, AccountSettingsPage{
-			BasePage: BasePage{
-				SessionUser: sessionUser,
-			},
-			Flash: NewFlash("Something went wrong. Please try again later.", FlashLevelError),
-		})
+		RenderClientErrorPageV2(w, http.StatusInternalServerError, "Something went wrong. Please try again later.")
 		return
 	}
 
 	flash, _ := PopSessionFlash(a.SessionManager, r.Context())
 	focus := r.FormValue("focus")
-	a.RenderPage(w, AccountSettingsPage{
-		BasePage: BasePage{
-			SessionUser: sessionUser,
-		},
-		Flash:              flash,
-		User:               user,
-		Focus:              focus,
-		GeneralUpdateForm:  NewAccountGeneralUpdateForm(),
-		PasswordUpdateForm: NewAccountPasswordUpdateForm(),
+	RenderAccountPage(w, http.StatusOK, AccountPageData{
+		SessionUser: sessionUser,
+		Flash:       flash,
+		User:        user,
+		Focus:       focus,
 	})
-}
-
-func (a AccountSettingsHandler) RenderPage(w http.ResponseWriter, data AccountSettingsPage) {
-	err := a.PageTemplateRenderer.RenderPageTemplate(w, "account.html", data)
-	if err != nil {
-		panic(err)
-	}
 }
 
 type UserInfoUpdater interface {
@@ -576,12 +651,10 @@ type NewEmailUpdateRequest struct {
 }
 
 type DoAccountHandler struct {
-	Log                  *slog.Logger
-	MailRenderer         MailTemplateRenderer
-	PageTemplateRenderer PageTemplateRenderer
-	SessionManager       *scs.SessionManager
-	FileStore            FileStore
-	UserStore            interface {
+	Log            *slog.Logger
+	SessionManager *scs.SessionManager
+	FileStore      FileStore
+	UserStore      interface {
 		UserGetterByID
 		UserInfoUpdater
 	}
@@ -610,22 +683,12 @@ func (d *DoAccountHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, ErrNoUser) {
 			d.Log.Debug("User no longer exists.", "user_id", user.ID)
 			d.SessionManager.Remove(r.Context(), SessionKeyUser)
-			d.RenderPage(w, AccountSettingsPage{
-				BasePage: BasePage{
-					SessionUser: userSession,
-				},
-				Flash: NewFlash("User no longer exists", FlashLevelError),
-			})
+			RenderClientErrorPageV2(w, http.StatusUnprocessableEntity, "User no longer exists.")
 			return
 		}
 
 		d.Log.Error("Unexpected error while parsing avatar.", "error", err.Error())
-		d.RenderPage(w, AccountSettingsPage{
-			BasePage: BasePage{
-				SessionUser: userSession,
-			},
-			Flash: NewFlash("Unexpected error occurred. Please try again later.", FlashLevelError),
-		})
+		RenderClientErrorPageV2(w, http.StatusInternalServerError, "Something went wrong. Please try again later.")
 		return
 	}
 
@@ -640,58 +703,54 @@ func (d *DoAccountHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		d.HandlePasswordUpdate(w, r, userSession, user)
 		return
 	default:
-		d.RenderPage(w, AccountSettingsPage{
-			BasePage: BasePage{
-				SessionUser: userSession,
-			},
-			User:  user,
-			Flash: NewFlash("Unknown action", FlashLevelError),
+		RenderAccountPage(w, http.StatusUnprocessableEntity, AccountPageData{
+			SessionUser: userSession,
+			User:        user,
+			Flash:       NewFlash("Unknown action", FlashLevelError),
 		})
 		return
 	}
 }
 
 func (d *DoAccountHandler) HandleGeneralUpdate(w http.ResponseWriter, r *http.Request, sessionUser *SessionUser, user *User) {
-	fieldValidation := NewFieldValidation()
-
-	form := NewAccountGeneralUpdateForm()
-	form.DisplayName = strings.TrimSpace(r.FormValue("display-name"))
+	fieldErrors := AccountGeneralUpdateFormError{}
 
 	var avatar *string
 	if b, filename, err := FormImage(r, "avatar"); err == nil {
 		fileURL, err := d.FileStore.Save("/users/avatar/"+filename, bytes.NewBuffer(b))
 		if err != nil {
 			d.Log.Error("Unexpected error while saving avatar to file store", "reason", err.Error())
-			fieldValidation.Add("avatar", "Unexpected error while uploading file. Please try again later.")
+			fieldErrors.Avatar = "Unexpected error while uploading file. Please try again later."
 		}
 		avatar = &fileURL
 
 	} else if errors.Is(err, ErrUnexpectedFileType) {
-		fieldValidation.Add("avatar", "Only supports image types.")
+		fieldErrors.Avatar = "Only supports image types."
 
 	} else if !errors.Is(err, http.ErrMissingFile) {
 		d.Log.Error("Unexpected error while parsing avatar.", "reason", err.Error())
-		fieldValidation.Add("avatar", "Unexpected error while uploading file. Please try again later.")
+		fieldErrors.Avatar = "Unexpected error while uploading file. Please try again later."
 	}
 
 	var displayName *string
-	if form.DisplayName != "" {
-		fieldValidation.Check(len(form.DisplayName) == 1, "display-name", "Value is too short.")
-		fieldValidation.Check(len(form.DisplayName) > 16, "display-name", "Value is too long. It must not exceed 16 characters long")
-		displayName = &form.DisplayName
+	if v := r.FormValue("display-name"); v != "" {
+		if l := len(v); l == 1 {
+			fieldErrors.DisplayName = "Value is too short."
+		} else if l > 16 {
+			fieldErrors.DisplayName = "Value is too long. It must not exceed 16 characters long."
+		}
+		displayName = &v
 	}
 
-	if !fieldValidation.Valid() {
-		d.Log.Debug("General account info update failed validation.", "field_errors", fieldValidation.FieldErrors)
-		d.RenderPage(w, AccountSettingsPage{
-			BasePage: BasePage{
-				SessionUser: sessionUser,
-			},
-			User:  user,
-			Focus: "general",
+	if fieldErrors.DisplayName != "" || fieldErrors.Avatar != "" {
+		d.Log.Debug("General account info update failed validation.", "field_errors", fieldErrors)
+		RenderAccountPage(w, http.StatusUnprocessableEntity, AccountPageData{
+			SessionUser: sessionUser,
+			User:        user,
+			Focus:       "general",
 			GeneralUpdateForm: AccountGeneralUpdateForm{
-				DisplayName:     r.FormValue("display-name"),
-				FieldValidation: fieldValidation,
+				DisplayName: r.FormValue("display-name"),
+				Errors:      fieldErrors,
 			},
 		})
 		return
@@ -702,31 +761,16 @@ func (d *DoAccountHandler) HandleGeneralUpdate(w http.ResponseWriter, r *http.Re
 		DisplayName: displayName,
 	})
 	if err != nil {
-		if errors.Is(err, ErrNoUser) {
-			d.Log.Debug("User no longer exists.", "user_id", sessionUser.UserID)
-			d.SessionManager.Remove(r.Context(), SessionKeyUser)
-			d.RenderPage(w, AccountSettingsPage{
-				BasePage: BasePage{
-					SessionUser: sessionUser,
-				},
-				User:  user,
-				Flash: NewFlash("User no longer exists.", FlashLevelError),
-			})
-			return
-		}
-
 		d.Log.Error("Unexpected error while updating user info", "reason", err)
-		d.RenderPage(w, AccountSettingsPage{
-			BasePage: BasePage{
-				SessionUser: sessionUser,
-			},
-			User:  user,
-			Flash: NewFlash("Unexpected error occurred. Please try again later.", FlashLevelError),
+		RenderAccountPage(w, http.StatusInternalServerError, AccountPageData{
+			SessionUser: sessionUser,
+			User:        user,
+			Flash:       NewFlash("Unexpected error occurred. Please try again later.", FlashLevelError),
 		})
 		return
 	}
 
-	d.Log.Debug("Account general  information was successfully updated.", "user_id", user.ID)
+	d.Log.Debug("Account general information was successfully updated.", "user_id", user.ID)
 
 	sessionUser.AvatarURL = user.AvatarURL
 	sessionUser.DisplayName = user.DisplayName
@@ -737,8 +781,6 @@ func (d *DoAccountHandler) HandleGeneralUpdate(w http.ResponseWriter, r *http.Re
 
 	http.Redirect(w, r, d.SuccessRedirectURL, http.StatusSeeOther)
 }
-
-var ErrUnexpectedFileType = errors.New("file from form has an unexpected file type")
 
 type EmailUpdateRequestMail struct {
 	Recipient string
@@ -756,13 +798,11 @@ func (d *DoAccountHandler) HandleEmailUpdate(w http.ResponseWriter, r *http.Requ
 	)
 	if err != nil {
 		d.Log.Error("Unable to create email update request.", "reason", err.Error())
-		d.RenderPage(w, AccountSettingsPage{
-			BasePage: BasePage{
-				SessionUser: sessionUser,
-			},
-			Flash: NewFlash("Something went wrong. Please try again later.", FlashLevelError),
-			User:  user,
-			Focus: "email",
+		RenderAccountPage(w, http.StatusInternalServerError, AccountPageData{
+			SessionUser: sessionUser,
+			Flash:       NewFlash("Something went wrong. Please try again later.", FlashLevelError),
+			User:        user,
+			Focus:       "email",
 		})
 		return
 	}
@@ -772,27 +812,10 @@ func (d *DoAccountHandler) HandleEmailUpdate(w http.ResponseWriter, r *http.Requ
 	link.RawQuery = "request-code=" + url.QueryEscape(emailUpdateRequest.Code)
 
 	var msg bytes.Buffer
-	header := map[string]string{
-		"Subject": "Update Email Request",
-	}
-
-	err = d.MailRenderer.RenderMailTemplate(&msg, "email_update.html", header, EmailUpdateRequestMail{
+	RenderEmailUpdateRequestMail(&msg, EmailUpdateRequestMail{
 		Recipient: user.DisplayName,
 		Link:      link.String(),
 	})
-	if err != nil {
-		d.Log.Error("Unable to execute update email template", "reason", err.Error())
-		d.RenderPage(w, AccountSettingsPage{
-			BasePage: BasePage{
-				sessionUser,
-			},
-			Flash: NewFlash("Something went wrong. Please try again later.", FlashLevelError),
-			User:  user,
-			Focus: "email",
-		})
-		return
-	}
-
 	go func() {
 		err := d.MailSender.SendMail(r.Context(), user.Email, msg.Bytes())
 		if err != nil {
@@ -805,29 +828,45 @@ func (d *DoAccountHandler) HandleEmailUpdate(w http.ResponseWriter, r *http.Requ
 		"user_id", emailUpdateRequest.UserID,
 		"code", emailUpdateRequest.Code,
 	)
-	d.RenderPage(w, AccountSettingsPage{
-		BasePage: BasePage{
-			SessionUser: sessionUser,
-		},
-		Flash: NewFlash("A link has been sent through your current email.", FlashLevelSuccess),
-		User:  user,
+	RenderAccountPage(w, http.StatusOK, AccountPageData{
+		SessionUser: sessionUser,
+		Flash:       NewFlash("A link has been sent through your current email.", FlashLevelSuccess),
+		User:        user,
 	})
 }
 
+//go:embed templates/mail/email_update.html
+var emailUpdateRequestMailTemplateRaw string
+
+var emailUpdateRequestMailTemplate = template.Must(template.New("email_update.html").Parse(emailUpdateRequestMailTemplateRaw))
+
+func RenderEmailUpdateRequestMail(w io.Writer, data EmailUpdateRequestMail) {
+	var b bytes.Buffer
+	err := emailUpdateRequestMailTemplate.Execute(&b, data)
+	if err != nil {
+		panic("unable to execute mail template: " + err.Error())
+	}
+
+	fmt.Fprintln(w, "Subject: Email Update Request")
+	fmt.Fprintln(w, "MIME-Version: 1.0")
+	fmt.Fprintln(w, "Content-Type: text/html; charset=utf-8")
+	fmt.Fprintln(w, "")
+	w.Write(b.Bytes())
+}
+
 func (d *DoAccountHandler) HandlePasswordUpdate(w http.ResponseWriter, r *http.Request, userSession *SessionUser, user *User) {
-	form := NewAccountPasswordUpdateFormFromRequest(r)
+	form := AccountPasswordUpdateForm{
+		CurrentPassword: r.FormValue("current-password"),
+		NewPassword:     r.FormValue("new-password"),
+		ConfirmPassword: r.FormValue("confirm-password"),
+	}
 
-	form.Check(form.CurrentPassword == "", "current-password", "Please fill out this field.")
-	form.Check(form.NewPassword == "", "new-password", "Please fill out this field.")
-	form.Check(form.ConfirmPassword == "", "confirm-password", "Please fill out this field.")
-	form.Check(form.ConfirmPassword != form.NewPassword, "confirm-password", "Value doesn't match the new password")
+	if valid, errors := ValidateAccountPasswordUpdateForm(form); !valid {
+		form.Errors = errors
 
-	if !form.Valid() {
-		d.Log.Debug("Password update validation failed.", "field_errors", form.FieldErrors)
-		d.RenderPage(w, AccountSettingsPage{
-			BasePage: BasePage{
-				SessionUser: userSession,
-			},
+		d.Log.Debug("Password update validation failed.", "field_errors", errors)
+		RenderAccountPage(w, http.StatusUnprocessableEntity, AccountPageData{
+			SessionUser:        userSession,
 			User:               user,
 			Focus:              "password",
 			PasswordUpdateForm: form,
@@ -839,35 +878,30 @@ func (d *DoAccountHandler) HandlePasswordUpdate(w http.ResponseWriter, r *http.R
 	if err != nil {
 		if errors.Is(err, ErrNoLocalAccount) {
 			d.Log.Debug("Failed to update password, no local account was found.")
-			d.RenderPage(w, AccountSettingsPage{
-				BasePage: BasePage{
-					SessionUser: userSession,
-				},
-				User:  user,
-				Flash: NewFlash("No local account found.", FlashLevelError),
+			RenderAccountPage(w, http.StatusUnprocessableEntity, AccountPageData{
+				SessionUser: userSession,
+				User:        user,
+				Flash:       NewFlash("No local account found.", FlashLevelError),
 			})
 			return
 		}
 
 		d.Log.Error("Uexpected error occurred while getting local account.", "user_id", user.ID)
-		d.RenderPage(w, AccountSettingsPage{
-			BasePage: BasePage{
-				SessionUser: userSession,
-			},
-			User:  user,
-			Flash: NewFlash("Something went wrong. Please try again later.", FlashLevelError),
+		RenderAccountPage(w, http.StatusInternalServerError, AccountPageData{
+			SessionUser: userSession,
+			User:        user,
+			Flash:       NewFlash("Something went wrong. Please try again later.", FlashLevelError),
 		})
 		return
 	}
 
 	err = bcrypt.CompareHashAndPassword(localAccount.PasswordHash, []byte(form.CurrentPassword))
 	if err != nil {
-		form.Add("current-password", "Password incorrect.")
+		form.Errors.CurrentPassword = "Password incorrect."
+
 		d.Log.Debug("Incorrect password", "user_id", user.ID)
-		d.RenderPage(w, AccountSettingsPage{
-			BasePage: BasePage{
-				SessionUser: userSession,
-			},
+		RenderAccountPage(w, http.StatusUnprocessableEntity, AccountPageData{
+			SessionUser:        userSession,
 			User:               user,
 			Focus:              "password",
 			PasswordUpdateForm: form,
@@ -878,10 +912,8 @@ func (d *DoAccountHandler) HandlePasswordUpdate(w http.ResponseWriter, r *http.R
 	hash, err := bcrypt.GenerateFromPassword([]byte(form.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
 		d.Log.Error("Unexpected error occurred while generating password hash.", "reason", err.Error())
-		d.RenderPage(w, AccountSettingsPage{
-			BasePage: BasePage{
-				SessionUser: userSession,
-			},
+		RenderAccountPage(w, http.StatusInternalServerError, AccountPageData{
+			SessionUser:        userSession,
 			User:               user,
 			Flash:              NewFlash("Something went wrong. Please try again later.", FlashLevelError),
 			PasswordUpdateForm: form,
@@ -892,10 +924,8 @@ func (d *DoAccountHandler) HandlePasswordUpdate(w http.ResponseWriter, r *http.R
 	_, err = d.LocalAccountStore.UpdateLocalAccountPassword(r.Context(), user.ID, hash)
 	if err != nil {
 		d.Log.Error("Unexpected error occurred updating password hash.", "reason", err.Error())
-		d.RenderPage(w, AccountSettingsPage{
-			BasePage: BasePage{
-				SessionUser: userSession,
-			},
+		RenderAccountPage(w, http.StatusInternalServerError, AccountPageData{
+			SessionUser:        userSession,
 			User:               user,
 			Flash:              NewFlash("Something went wrong. Please try again later.", FlashLevelError),
 			PasswordUpdateForm: form,
@@ -909,16 +939,61 @@ func (d *DoAccountHandler) HandlePasswordUpdate(w http.ResponseWriter, r *http.R
 	http.Redirect(w, r, d.SuccessRedirectURL, http.StatusSeeOther)
 }
 
-func (a *DoAccountHandler) RenderPage(w http.ResponseWriter, data AccountSettingsPage) {
-	err := a.PageTemplateRenderer.RenderPageTemplate(w, "account.html", data)
-	if err != nil {
-		panic(err)
-	}
+type AccountEmailUpdatePage struct {
+	BasePage
+	Flash        *Flash
+	LoginSession *SessionUser
+	RequestCode  string
+	Form         AccountEmailUpdateForm
 }
 
-type AccountEmailUpdateHandler struct {
+type AccountEmailUpdateForm struct {
+	NewEmail string
+	Password string
+	Errors   AccountEmailUpdateFormErrors
+}
+
+type AccountEmailUpdateFormErrors struct {
+	NewEmail string
+	Password string
+}
+
+func ValidateAccountEmailUpdateForm(form AccountEmailUpdateForm) (valid bool, errors AccountEmailUpdateFormErrors) {
+	if form.NewEmail == "" {
+		errors.NewEmail = "Please fill out this field."
+	} else if IsInvalidEmail(form.NewEmail) {
+		errors.NewEmail = "Value is invalid email."
+	}
+
+	if form.Password == "" {
+		errors.Password = "Please fill out this field."
+	}
+
+	if errors.NewEmail != "" || errors.Password != "" {
+		return false, errors
+	}
+
+	return true, AccountEmailUpdateFormErrors{}
+}
+
+//go:embed templates/email_update.html templates/base.html
+var accountEmailUpdateTemplateFS embed.FS
+var accountEmailUpdateTemplate = template.Must(template.ParseFS(accountEmailUpdateTemplateFS, "templates/email_update.html", "templates/base.html"))
+
+func RenderAccountEmailUpdatePage(w http.ResponseWriter, status int, data AccountEmailUpdatePage) {
+	var b bytes.Buffer
+	err := accountEmailUpdateTemplate.ExecuteTemplate(&b, "base.html", data)
+	if err != nil {
+		panic("unable to execute email update template: " + err.Error())
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(status)
+	w.Write(b.Bytes())
+}
+
+type EmailUpdateHandler struct {
 	Log                      *slog.Logger
-	PageTemplateRenderer     PageTemplateRenderer
 	SessionManager           *scs.SessionManager
 	EmailUpdateRequestGetter EmailUpdateRequestGetter
 }
@@ -927,13 +1002,16 @@ type EmailUpdateRequestGetter interface {
 	GetEmailUpdateRequest(ctx context.Context, code string) (*EmailUpdateRequest, error)
 }
 
-func (a *AccountEmailUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (a *EmailUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sessionUser := GetSessionUser(r.Context())
 
 	requestCode := r.URL.Query().Get("request-code")
 	if requestCode == "" {
 		a.Log.Debug("Request code for email update is invalid.", "request_code", requestCode)
-		a.Error(w, sessionUser, "Request code for email update is invalid.")
+		RenderEmailUpdateErrorPage(w, http.StatusUnprocessableEntity, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Request code for email update is invalid.",
+		})
 		return
 	}
 
@@ -941,52 +1019,49 @@ func (a *AccountEmailUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		if errors.Is(err, ErrNoEmailUpdateRequest) {
 			a.Log.Debug("Request code for email update is invalid.", "request_code", requestCode)
-			a.Error(w, sessionUser, "Request code for email update is invalid.")
+			RenderEmailUpdateErrorPage(w, http.StatusUnprocessableEntity, EmailUpdateErrorPageData{
+				SessionUser: sessionUser,
+				Message:     "Request code for email update is invalid.",
+			})
 			return
 		}
 
 		a.Log.Error("Unexpected error occurred while getting email update request by user id.", "reason", err.Error())
-		a.Error(w, sessionUser, "Something went wrong. Please try again later.")
+		RenderEmailUpdateErrorPage(w, http.StatusInternalServerError, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Something went wrong. Please try again later.",
+		})
 		return
 	}
 
 	if requestCode != emailUpdateRequest.Code {
 		a.Log.Debug("Request code for the user doesn't match the one stored in database.", "request_code", requestCode)
-		a.Error(w, sessionUser, "Request code for email update is invalid.")
+		RenderEmailUpdateErrorPage(w, http.StatusInternalServerError, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Request code for email update is invalid.",
+		})
 		return
 	}
 
 	if time.Now().After(emailUpdateRequest.ExpiresAt) {
 		a.Log.Debug("Request code for email update is no longer valid.", "request_code", requestCode)
-		a.Error(w, sessionUser, "Request code for email update is no longer invalid.")
+		RenderEmailUpdateErrorPage(w, http.StatusBadRequest, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Request code for email update is no longer valid.",
+		})
 		return
 	}
 
-	err = a.PageTemplateRenderer.RenderPageTemplate(w, "email_update.html", AccountEmailUpdatePage{
-		LoginSession: sessionUser,
-		RequestCode:  requestCode,
-		Form:         NewAccountEmailUpdateForm(),
-	})
-	if err != nil {
-		panic(err)
-	}
-}
-
-func (a *AccountEmailUpdateHandler) Error(w http.ResponseWriter, sessionUser *SessionUser, message string) {
-	err := a.PageTemplateRenderer.RenderPageTemplate(w, "email_update_error.html", EmailUpdateErrorPage{
+	RenderAccountEmailUpdatePage(w, http.StatusOK, AccountEmailUpdatePage{
 		BasePage: BasePage{
 			SessionUser: sessionUser,
 		},
-		Message: message,
+		RequestCode: requestCode,
 	})
-	if err != nil {
-		panic(err)
-	}
 }
 
-type DoAccountEmailUpdateHandler struct {
+type DoEmailUpdateHandler struct {
 	Log                     *slog.Logger
-	PageTemplateRenderer    PageTemplateRenderer
 	SessionManager          *scs.SessionManager
 	EmailUpdateRequestStore interface {
 		EmailUpdateRequestGetter
@@ -997,27 +1072,41 @@ type DoAccountEmailUpdateHandler struct {
 	VerificationRedirectURL   string
 }
 
-func (a *DoAccountEmailUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+const SessionKeyEmailUpdate = "session_email_update_values"
+
+type SessionEmailUpdate struct {
+	UserID           string
+	NewEmail         string
+	VerificationCode string
+	Tries            int
+}
+
+func (a *DoEmailUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sessionUser := GetSessionUser(r.Context())
 
 	requestCode := r.FormValue("request-code")
 	if requestCode == "" {
 		a.Log.Debug("Request code for email update is invalid.", "request_code", requestCode)
-		a.Error(w, sessionUser, "Request Code for email update is invalid")
+		RenderEmailUpdateErrorPage(w, http.StatusUnprocessableEntity, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Request code for email update is invalid.",
+		})
 		return
 	}
 
-	form := NewAccountEmailUpdateForm()
-	form.NewEmail = r.FormValue("new-email")
-	form.Password = r.FormValue("password")
+	form := AccountEmailUpdateForm{
+		NewEmail: r.FormValue("new-email"),
+		Password: r.FormValue("password"),
+	}
 
-	form.Check(form.NewEmail == "", "new-email", "Please fill out this field.")
-	form.Check(IsInvalidEmail(form.NewEmail), "new-email", "Value is invalid email.")
-	form.Check(form.Password == "", "password", "Please fill out this field.")
+	if valid, errors := ValidateAccountEmailUpdateForm(form); !valid {
+		form.Errors = errors
 
-	if !form.Valid() {
-		a.Log.Debug("Validation failed.", "field_errors", form.FieldErrors)
-		a.RenderPage(w, AccountEmailUpdatePage{
+		a.Log.Debug("Validation failed.", "field_errors", errors)
+		RenderAccountEmailUpdatePage(w, http.StatusUnprocessableEntity, AccountEmailUpdatePage{
+			BasePage: BasePage{
+				SessionUser: sessionUser,
+			},
 			LoginSession: sessionUser,
 			RequestCode:  requestCode,
 			Form:         form,
@@ -1029,39 +1118,57 @@ func (a *DoAccountEmailUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 	if err != nil {
 		if errors.Is(err, ErrNoEmailUpdateRequest) {
 			a.Log.Debug("No email update request found.", "request_code", requestCode)
-			a.Error(w, sessionUser, "Request Code for email update is invalid")
+			RenderEmailUpdateErrorPage(w, http.StatusUnprocessableEntity, EmailUpdateErrorPageData{
+				SessionUser: sessionUser,
+				Message:     "Request code for email update is invalid.",
+			})
 			return
 		}
 
 		a.Log.Error("Unexpected error occurred while getting email update request.", "reason", err.Error())
-		a.Error(w, sessionUser, "Something went wrong. Please try again later.")
+		RenderEmailUpdateErrorPage(w, http.StatusInternalServerError, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Something went wrong. Please try again later.",
+		})
 		return
 	}
 
 	if requestCode != emailUpdateRequest.Code {
 		a.Log.Debug("Request code for the user doesn't match the one stored in database.", "request_code", requestCode)
-		a.Error(w, sessionUser, "Request code for email update is invalid.")
+		RenderEmailUpdateErrorPage(w, http.StatusUnprocessableEntity, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Request code for email update is invalid.",
+		})
 		return
 	}
 
 	if time.Now().After(emailUpdateRequest.ExpiresAt) {
 		a.Log.Debug("Request code for email update is no longer valid.", "request_code", requestCode)
-		a.Error(w, sessionUser, "Request code for email update is no longer valid.")
+		RenderEmailUpdateErrorPage(w, http.StatusBadRequest, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Request code for email update is no longer valid.",
+		})
 		return
 	}
 
 	localAccount, _, err := a.LocalAccountGetterByEmail.GetLocalAccountByEmail(r.Context(), emailUpdateRequest.CurrentEmail)
 	if err != nil {
 		a.Log.Error("Unable to get user's local account by email.", "user_id", emailUpdateRequest.UserID, "email", emailUpdateRequest.CurrentEmail)
-		a.Error(w, sessionUser, "Something went wrong. Please try again later.")
+		RenderEmailUpdateErrorPage(w, http.StatusInternalServerError, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Something went wrong. Please try again later.",
+		})
 		return
 	}
 
 	err = bcrypt.CompareHashAndPassword(localAccount.PasswordHash, []byte(form.Password))
 	if err != nil {
 		a.Log.Debug("Password comparison failed.", "user_id", emailUpdateRequest.UserID)
-		form.Add("password", "Incorrect password.")
-		a.RenderPage(w, AccountEmailUpdatePage{
+		form.Errors.Password = "Incorrect password."
+		RenderAccountEmailUpdatePage(w, http.StatusUnprocessableEntity, AccountEmailUpdatePage{
+			BasePage: BasePage{
+				SessionUser: sessionUser,
+			},
 			LoginSession: sessionUser,
 			RequestCode:  requestCode,
 			Form:         form,
@@ -1071,8 +1178,11 @@ func (a *DoAccountEmailUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 
 	if form.NewEmail == emailUpdateRequest.CurrentEmail {
 		a.Log.Debug("The current email is the same as the new email.")
-		form.Add("new-email", "Please use a different email.")
-		a.RenderPage(w, AccountEmailUpdatePage{
+		form.Errors.NewEmail = "Please use a different email."
+		RenderAccountEmailUpdatePage(w, http.StatusUnprocessableEntity, AccountEmailUpdatePage{
+			BasePage: BasePage{
+				SessionUser: sessionUser,
+			},
 			LoginSession: sessionUser,
 			RequestCode:  requestCode,
 			Form:         form,
@@ -1096,7 +1206,11 @@ func (a *DoAccountEmailUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 	_, err = a.EmailUpdateRequestStore.RemoveEmailUpdateRequest(r.Context(), requestCode)
 	if err != nil {
 		a.Log.Error("Unable to remove email update request.", "reason", err.Error())
-		a.Error(w, sessionUser, "Something went wrong. Please try again later.")
+		RenderEmailUpdateErrorPage(w, http.StatusInternalServerError, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Something went wrong. Please try again later.",
+		})
+		return
 	}
 
 	a.SessionManager.Put(r.Context(), SessionKeyEmailUpdate, SessionEmailUpdate{
@@ -1109,58 +1223,32 @@ func (a *DoAccountEmailUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 	http.Redirect(w, r, a.VerificationRedirectURL, http.StatusSeeOther)
 }
 
-func (d *DoAccountEmailUpdateHandler) RenderPage(w http.ResponseWriter, data AccountEmailUpdatePage) {
-	err := d.PageTemplateRenderer.RenderPageTemplate(w, "email_update.html", data)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func (d *DoAccountEmailUpdateHandler) Error(w http.ResponseWriter, sessionUser *SessionUser, message string) {
-	err := d.PageTemplateRenderer.RenderPageTemplate(w, "email_update_error.html", EmailUpdateErrorPage{
-		BasePage: BasePage{
-			SessionUser: sessionUser,
-		},
-		Message: message,
-	})
-	if err != nil {
-		panic(err)
-	}
-}
-
-const SessionKeyEmailUpdate = "session_email_update_values"
-
-type SessionEmailUpdate struct {
-	UserID           string
-	NewEmail         string
-	VerificationCode string
-	Tries            int
-}
-
-type AccountEmailUpdateForm struct {
-	NewEmail string
-	Password string
-	*FieldValidation
-}
-
-func NewAccountEmailUpdateForm() AccountEmailUpdateForm {
-	return AccountEmailUpdateForm{
-		FieldValidation: NewFieldValidation(),
-	}
-}
-
-type AccountEmailUpdatePage struct {
+type EmailUpdateVerificationPageData struct {
 	BasePage
-	Flash        *Flash
-	LoginSession *SessionUser
-	RequestCode  string
-	Form         AccountEmailUpdateForm
+	NewEmail              string
+	VerificationCode      string
+	VerificationCodeError string
+}
+
+//go:embed templates/email_update_verification.html templates/base.html
+var emailUpdateVerificationTemplateFS embed.FS
+var emailUpdateVerificationTemplate = template.Must(template.ParseFS(emailUpdateVerificationTemplateFS, "templates/email_update_verification.html", "templates/base.html"))
+
+func RenderEmailUpdateVerificationPage(w http.ResponseWriter, status int, data EmailUpdateVerificationPageData) {
+	var b bytes.Buffer
+	err := emailUpdateVerificationTemplate.ExecuteTemplate(&b, "base.html", data)
+	if err != nil {
+		panic("unable to execute email update verification template: " + err.Error())
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(status)
+	w.Write(b.Bytes())
 }
 
 type EmailUpdateVerificationHandler struct {
-	Log                  *slog.Logger
-	PageTemplateRenderer PageTemplateRenderer
-	SessionManager       *scs.SessionManager
+	Log            *slog.Logger
+	SessionManager *scs.SessionManager
 }
 
 func (e *EmailUpdateVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -1171,34 +1259,25 @@ func (e *EmailUpdateVerificationHandler) ServeHTTP(w http.ResponseWriter, r *htt
 		e.Log.Debug("State no longer valid for email update verification. Some data from session was missing.")
 		flash := NewFlash("Invalid state. Please restart email update process.", FlashLevelError)
 		e.SessionManager.Put(r.Context(), SessionKeyFlash, flash)
-		err := e.PageTemplateRenderer.RenderPageTemplate(w, "email_update_error.html", EmailUpdateErrorPage{
-			BasePage: BasePage{
-				SessionUser: sessionUser,
-			},
-			Message: "Something went wrong. Please restart email update process.",
+		RenderEmailUpdateErrorPage(w, http.StatusInternalServerError, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Invalid state. Please restart email update process.",
 		})
-		if err != nil {
-			panic(err)
-		}
 		return
 	}
 
-	err := e.PageTemplateRenderer.RenderPageTemplate(w, "email_update_verification.html", EmailUpdateVerificationPage{
+	RenderEmailUpdateVerificationPage(w, http.StatusOK, EmailUpdateVerificationPageData{
 		BasePage: BasePage{
 			SessionUser: sessionUser,
 		},
 		NewEmail: sessionEmailUpdate.NewEmail,
 	})
-	if err != nil {
-		panic(err)
-	}
 }
 
 type DoEmailUpdateVerficationHandler struct {
-	Log                  *slog.Logger
-	PageTemplateRenderer PageTemplateRenderer
-	SessionManager       *scs.SessionManager
-	UserInfoUpdater      UserInfoUpdater
+	Log             *slog.Logger
+	SessionManager  *scs.SessionManager
+	UserInfoUpdater UserInfoUpdater
 }
 
 func (d *DoEmailUpdateVerficationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -1206,52 +1285,40 @@ func (d *DoEmailUpdateVerficationHandler) ServeHTTP(w http.ResponseWriter, r *ht
 
 	sessionEmailUpdate, ok := d.SessionManager.Get(r.Context(), SessionKeyEmailUpdate).(*SessionEmailUpdate)
 	if !ok {
-		d.Log.Error("Invalid state. Please restart email update process.")
-		err := d.PageTemplateRenderer.RenderPageTemplate(w, "email_update_error.html", EmailUpdateErrorPage{
-			BasePage: BasePage{
-				SessionUser: sessionUser,
-			},
-			Message: "Invalid state. Please restart email update process.",
+		d.Log.Error("State no longer valid for email update verification. Some data from session was missing.")
+		RenderEmailUpdateErrorPage(w, http.StatusInternalServerError, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Invalid state. Please restart email update process.",
 		})
-		if err != nil {
-			panic(err)
-		}
 		return
 	}
 
 	if sessionEmailUpdate.Tries > 5 {
 		d.Log.Error("Too many incorrect verification code attempts.", "user_id", sessionEmailUpdate.UserID)
 		d.SessionManager.Remove(r.Context(), SessionKeyEmailUpdate)
-		err := d.PageTemplateRenderer.RenderPageTemplate(w, "email_update_error.html", EmailUpdateErrorPage{
-			BasePage: BasePage{
-				SessionUser: sessionUser,
-			},
-			Message: "Too many incorrect verification code attempts.",
+		RenderEmailUpdateErrorPage(w, http.StatusInternalServerError, EmailUpdateErrorPageData{
+			SessionUser: sessionUser,
+			Message:     "Too many incorrect verification code attempts.",
 		})
-		if err != nil {
-			panic(err)
-		}
+		return
 	}
 
 	verificationCode := r.FormValue("verification-code")
 	if verificationCode == "" {
-		err := d.PageTemplateRenderer.RenderPageTemplate(w, "email_update_verification.html", EmailUpdateVerificationPage{
+		RenderEmailUpdateVerificationPage(w, http.StatusUnprocessableEntity, EmailUpdateVerificationPageData{
 			BasePage: BasePage{
 				SessionUser: sessionUser,
 			},
 			NewEmail:              sessionEmailUpdate.NewEmail,
 			VerificationCodeError: "Please fill out this field.",
 		})
-		if err != nil {
-			panic(err)
-		}
 		return
 	}
 
 	if verificationCode != sessionEmailUpdate.VerificationCode {
 		sessionEmailUpdate.Tries++
 		d.SessionManager.Put(r.Context(), SessionKeyEmailUpdate, sessionEmailUpdate)
-		err := d.PageTemplateRenderer.RenderPageTemplate(w, "email_update_verification.html", EmailUpdateVerificationPage{
+		RenderEmailUpdateVerificationPage(w, http.StatusOK, EmailUpdateVerificationPageData{
 			BasePage: BasePage{
 				SessionUser: sessionUser,
 			},
@@ -1259,9 +1326,6 @@ func (d *DoEmailUpdateVerficationHandler) ServeHTTP(w http.ResponseWriter, r *ht
 			VerificationCodeError: "Verification code invalid.",
 			VerificationCode:      verificationCode,
 		})
-		if err != nil {
-			panic(err)
-		}
 		return
 	}
 
@@ -1269,47 +1333,59 @@ func (d *DoEmailUpdateVerficationHandler) ServeHTTP(w http.ResponseWriter, r *ht
 		Email: &sessionEmailUpdate.NewEmail,
 	})
 	if err != nil {
-		err := d.PageTemplateRenderer.RenderPageTemplate(w, "email_update_error.html", EmailUpdateErrorPage{
-			BasePage: BasePage{
-				SessionUser: sessionUser,
-			},
-			Message: "Something went wrong. Please try again later.",
-		})
-		if err != nil {
-			panic(err)
-		}
+		d.Log.Error("Failed to update user email.", "user_id", sessionEmailUpdate.UserID, "new_email", sessionEmailUpdate.NewEmail)
+		RenderClientErrorPageV2(w, http.StatusInternalServerError, "Something went wrong. Please try again later.")
+		return
 	}
 
 	d.SessionManager.Remove(r.Context(), SessionKeyEmailUpdate)
 	d.Log.Debug("Email update was successful.", "user_id", sessionEmailUpdate.UserID, "new_email", sessionEmailUpdate.NewEmail)
-	err = d.PageTemplateRenderer.RenderPageTemplate(w, "email_update_success.html", EmailUpdateSuccessPage{
+	RenderEmailUpdateSuccessPage(w, http.StatusOK, EmailUpdateSuccessPageData{
 		BasePage: BasePage{
 			SessionUser: sessionUser,
 		},
 		NewEmail: sessionEmailUpdate.NewEmail,
 	})
-	if err != nil {
-		panic(err)
-	}
 }
 
-type EmailUpdateVerificationPage struct {
-	BasePage
-	NewEmail              string
-	VerificationCode      string
-	VerificationCodeError string
-}
-
-type EmailUpdateSuccessPage struct {
+type EmailUpdateSuccessPageData struct {
 	BasePage
 	NewEmail string
 }
 
-type EmailUpdateErrorPage struct {
-	BasePage
-	Message string
+//go:embed templates/email_update_success.html templates/base.html
+var emailUpdateSuccessTemplateFS embed.FS
+var emailUpdateSuccessTemplate = template.Must(template.ParseFS(emailUpdateSuccessTemplateFS, "templates/email_update_success.html", "templates/base.html"))
+
+func RenderEmailUpdateSuccessPage(w http.ResponseWriter, status int, data EmailUpdateSuccessPageData) {
+	var b bytes.Buffer
+	err := emailUpdateSuccessTemplate.ExecuteTemplate(&b, "base.html", data)
+	if err != nil {
+		panic("unable to execute email update success template: " + err.Error())
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+	w.Write(b.Bytes())
 }
 
-type MailSender interface {
-	SendMail(ctx context.Context, email string, msg []byte) error
+//go:embed templates/email_update_error.html templates/base.html
+var emailUpdateErrorTemplateFS embed.FS
+var emailUpdateErrorTemplate = template.Must(template.ParseFS(emailUpdateErrorTemplateFS, "templates/email_update_error.html", "templates/base.html"))
+
+type EmailUpdateErrorPageData struct {
+	SessionUser *SessionUser
+	Message     string
+}
+
+func RenderEmailUpdateErrorPage(w http.ResponseWriter, status int, data EmailUpdateErrorPageData) {
+	var b bytes.Buffer
+	err := emailUpdateErrorTemplate.ExecuteTemplate(&b, "base.html", data)
+	if err != nil {
+		panic("unable to execute email update error template: " + err.Error())
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(status)
+	w.Write(b.Bytes())
 }

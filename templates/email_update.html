@@ -13,7 +13,7 @@
 					value="{{ .Form.NewEmail }}"
 					class="form-control"
 					aria-describedby="new-email-error">
-				{{ with index .Form.FieldErrors `new-email` }}
+				{{ with .Form.Errors.NewEmail }}
 					<small id="new-email-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
@@ -23,7 +23,7 @@
 					value="{{ .Form.Password }}"
 					class="form-control"
 					aria-describedby="password-error">
-				{{ with index .Form.FieldErrors `password` }}
+				{{ with .Form.Errors.Password }}
 					<small id="password-error" class="form-helper form-helper--error">{{ . }}</small>
 				{{ end }}
 			</div>
