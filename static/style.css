@@ -1,5 +1,21 @@
 @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap');
 
+:root {
+	--color-primary: #191D23;
+	--color-primary-hover: #3E4043;
+	--color-primary-contrast: white;
+	--color-text: white;
+	--color-background: #FFF4EB;
+	--color-background-alt: white;
+
+	--spacing: 1rem;
+	--block-spacing-horizontal: var(--spacing);
+	--block-spacing-vertical: var(--spacing);
+	--element-spacing-horizontal: 1.25rem;
+	--element-spacing-vertical: .75rem;
+	--element-radius: .5rem;
+}
+
 *,
 *::before,
 *::after {
@@ -10,4 +26,59 @@ body {
 	margin: 0;
 	font-family: Fredoka, sans-serif;
 	font-weight: 400;
+	background-color: var(--color-background);
+}
+
+img {
+	width: 100%;
+}
+
+.navbar {
+	background-color: white;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: calc(var(--block-spacing-vertical) * .75) var(--block-spacing-horizontal);
+}
+
+.navbar__logo {
+	width: 5rem;
+}
+
+.navbar__links {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--block-spacing-horizontal) * .75);
+}
+
+.button {
+	display: block;
+	background-color: var(--color-primary);
+	padding: var(--element-spacing-vertical) var(--element-spacing-horizontal);
+	color: var(--color-primary-contrast);
+	font-weight: 600;
+	text-decoration: none;
+	text-transform: uppercase;
+	text-align: center;
+	border-radius: var(--element-radius);
+}
+
+.button:hover {
+	background-color: var(--color-primary-hover);
+}
+
+.button:focus {
+	outline-offset: .125rem;
+}
+
+.button--outline {
+	background-color: transparent;
+	box-shadow: inset 0 0 0 .125rem var(--color-primary);
+	color: var(--color-primary)
+}
+
+.button--outline:hover {
+	background-color: transparent;
+	box-shadow: inset 0 0 0 .125rem var(--color-primary-hover);
+	color: var(--color-primary-hover)
 }
