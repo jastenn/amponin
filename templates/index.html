@@ -1,27 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-	<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1">
-		<title>Amponin</title>
-		<link href="/static/style.css" rel="stylesheet">
+{{ define "head" }}
+	<title>Amponin</title>
+{{ end }}
 
-		<link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
-		<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
-		<link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
-		<link rel="manifest" href="/static/site.webmanifest">
-	</head>
-	<body>
-		<header>
-			<nav class="navbar">
-				<a href="/" class="navbar__logo"><img src="/static/logo-full.png" alt="Amponin"></a>
-				
-				<div class="navbar__links">
-					<a href="#" class="button button--outline">Signup</a>
-					<a href="#" class="button">Login</a>
-				</div>
-			</nav>
-		</header>
-		<h1>Hello from Amponin</h1>
-	</body>
-</html>
+{{ define "content" }}
+	<h1>Hello from Amponin.</h1>
+{{ end }}

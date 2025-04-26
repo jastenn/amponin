@@ -1,0 +1,18 @@
+.error {
+	max-width: 50rem;
+	text-align: center;
+	color: var(--color-error, tomato);
+}
+
+.error__icon {
+	width: 3rem;
+	height: 3rem;
+	margin-bottom: .5rem;
+}
+
+.error__message {
+	color: var(--color-error, tomato);
+	font-size: 2rem;
+	font-weight: 600;
+	margin: 0;
+}

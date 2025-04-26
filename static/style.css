@@ -33,6 +33,16 @@ img {
 	width: 100%;
 }
 
+header + * {
+	margin-top: 4rem;
+}
+
+.container {
+	max-width: 75rem;
+	padding-inline: var(--block-spacing-horizontal);
+	margin-inline: auto;
+}
+
 .navbar {
 	background-color: white;
 	display: flex;
