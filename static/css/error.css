@@ -2,6 +2,7 @@
 	max-width: 50rem;
 	text-align: center;
 	color: var(--color-error, tomato);
+	margin-inline: auto;
 }
 
 .error__icon {
