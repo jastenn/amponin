@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -13,7 +14,10 @@ import (
 
 	nanoid "github.com/matoous/go-nanoid/v2"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/oauth2"
 )
+
+var ErrUserEmailInUse = errors.New("user email is already in use.")
 
 type User struct {
 	ID        string
@@ -31,11 +35,34 @@ type LocalAccount struct {
 	UpdatedAt    time.Time
 }
 
-const SessionKeySignupVerificationData = "session_signup_verification"
+type NewLocalAccount struct {
+	Name         string
+	Email        string
+	PasswordHash []byte
+}
 
-type SessionSignupVerificationData struct {
-	SignupValues
-	VerificationCode string
+type LocalAccountCreator interface {
+	CreateLocalAccount(context.Context, NewLocalAccount) (*LocalAccount, *User, error)
+}
+
+const ForeignProviderGoogle = "google"
+
+type ForeignAccount struct {
+	Provider   string
+	ProviderID string
+	CreatedAt  time.Time
+}
+
+type NewForeignAccount struct {
+	Name       string
+	Email      string
+	AvatarURL  string
+	Provider   string
+	ProviderID string
+}
+
+type ForeignAccountCreator interface {
+	CreateForeignAccount(context.Context, NewForeignAccount) (*ForeignAccount, *User, error)
 }
 
 type SignupHandler struct {
@@ -43,12 +70,14 @@ type SignupHandler struct {
 	MailSender              MailSender
 	SessionStore            *CookieSessionStore
 	VerificationRedirectURL string
+	GoogleOAuth2Config      *oauth2.Config
 }
 
 type SignupPageData struct {
-	Flash       *Flash
-	FieldValues SignupValues
-	FieldErrors SignupErrors
+	Flash                 *Flash
+	FieldValues           SignupValues
+	FieldErrors           SignupErrors
+	GoogleAuthRedirectURL string
 }
 
 type SignupValues struct {
@@ -76,6 +105,10 @@ var signupPage = template.Must(template.ParseFS(embedFS, "templates/base.html", 
 var verificationEmail = template.Must(template.ParseFS(embedFS, "templates/email/verification.html"))
 
 func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	googleAuthState := nanoid.Must(8)
+	googleAuthRedirectURL := s.GoogleOAuth2Config.AuthCodeURL(googleAuthState, oauth2.AccessTypeOnline)
+	s.SessionStore.Encode(w, SessionKeyGoogleAuthState, googleAuthState, time.Minute*5)
+
 	if r.Method == http.MethodPost {
 		signupValues := SignupValues{
 			Name:            r.FormValue("name"),
@@ -87,8 +120,9 @@ func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		signupErrors, valid := s.Validate(signupValues)
 		if !valid {
 			err := RenderPage(w, signupPage, http.StatusOK, SignupPageData{
-				FieldValues: signupValues,
-				FieldErrors: signupErrors,
+				FieldValues:           signupValues,
+				FieldErrors:           signupErrors,
+				GoogleAuthRedirectURL: googleAuthRedirectURL,
 			})
 			if err != nil {
 				s.Log.Error("Unable to render page.", "error", err.Error())
@@ -130,10 +164,7 @@ func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 
-		flash := &Flash{
-			Level:   FlashLevelSuccess,
-			Message: "Verification code sent.",
-		}
+		flash := NewFlash(FlashLevelSuccess, "Verification code sent.")
 		s.SessionStore.Encode(w, SessionKeyFlash, flash, SessionMaxAgeFlash)
 
 		http.Redirect(w, r, s.VerificationRedirectURL, http.StatusSeeOther)
@@ -144,7 +175,8 @@ func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.SessionStore.DecodeAndRemove(w, r, SessionKeyFlash, &flash)
 
 	err := RenderPage(w, signupPage, http.StatusOK, SignupPageData{
-		Flash: flash,
+		Flash:                 flash,
+		GoogleAuthRedirectURL: googleAuthRedirectURL,
 	})
 	if err != nil {
 		s.Log.Error("Unable to render page.", "error", err.Error())
@@ -200,16 +232,11 @@ type SignupVerificationHandler struct {
 	SignupURL           string
 }
 
-type NewLocalAccount struct {
-	Name         string
-	Email        string
-	PasswordHash []byte
-}
+const SessionKeySignupVerificationData = "session_signup_verification"
 
-var ErrEmailInUse = errors.New("email is already in use.")
-
-type LocalAccountCreator interface {
-	CreateLocalAccount(context.Context, NewLocalAccount) (*LocalAccount, *User, error)
+type SessionSignupVerificationData struct {
+	SignupValues
+	VerificationCode string
 }
 
 type SignupVerificationPageData struct {
@@ -228,10 +255,7 @@ func (s *SignupVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		err := s.SessionStore.Decode(r, SessionKeySignupVerificationData, &signupVerificationData)
 		if err != nil {
 			s.Log.Error("Unable to decode signup verification data.", "error", err.Error())
-			flash := &Flash{
-				Level:   FlashLevelError,
-				Message: "Please start the signup process.",
-			}
+			flash := NewFlash(FlashLevelError, "Please start the signup process.")
 			s.SessionStore.Encode(w, SessionKeyFlash, flash, SessionMaxAgeFlash)
 			http.Redirect(w, r, s.SignupURL, http.StatusSeeOther)
 			return
@@ -249,10 +273,7 @@ func (s *SignupVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		if err != nil {
 			s.Log.Error("Unable to generate hash from password.", "error", err.Error())
 			s.RenderPage(w, http.StatusOK, SignupVerificationPageData{
-				Flash: &Flash{
-					Level:   FlashLevelError,
-					Message: ClientMessageUnexpectedError,
-				},
+				Flash:            NewFlash(FlashLevelError, ClientMessageUnexpectedError),
 				VerificationCode: verificationCode,
 			})
 			return
@@ -264,12 +285,9 @@ func (s *SignupVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 			PasswordHash: passwordHash,
 		})
 		if err != nil {
-			if errors.Is(err, ErrEmailInUse) {
+			if errors.Is(err, ErrUserEmailInUse) {
 				s.Log.Info("Email is already in use.", "email", signupVerificationData.Email)
-				flash := &Flash{
-					Level:   FlashLevelError,
-					Message: "Email is already in use.",
-				}
+				flash := NewFlash(FlashLevelError, "Email is already in use.")
 				s.SessionStore.Encode(w, SessionKeyFlash, flash, SessionMaxAgeFlash)
 				http.Redirect(w, r, s.SignupURL, http.StatusSeeOther)
 				return
@@ -278,20 +296,14 @@ func (s *SignupVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 			s.Log.Error("Unable to create local account.", "error", err.Error())
 
 			s.RenderPage(w, http.StatusOK, SignupVerificationPageData{
-				Flash: &Flash{
-					Level:   FlashLevelError,
-					Message: ClientMessageUnexpectedError,
-				},
+				Flash:            NewFlash(FlashLevelError, ClientMessageUnexpectedError),
 				VerificationCode: verificationCode,
 			})
 			return
 		}
 
 		s.Log.Info("Successfully created a local account.", "user_id", user.ID, "local_account_id", localAccount.ID)
-		flash := &Flash{
-			Level:   FlashLevelSuccess,
-			Message: "Successfully created an account.",
-		}
+		flash := NewFlash(FlashLevelSuccess, "Successfully created an account.")
 		s.SessionStore.Encode(w, SessionKeyFlash, flash, SessionMaxAgeFlash)
 		http.Redirect(w, r, s.SignupURL, http.StatusSeeOther)
 		return
@@ -312,4 +324,84 @@ func (s *SignupVerificationHandler) RenderPage(w http.ResponseWriter, status int
 		RenderErrorPage(w, http.StatusInternalServerError, ClientMessageUnexpectedError)
 		return
 	}
+}
+
+type GoogleAuthRedirectHandler struct {
+	Log                   *slog.Logger
+	GoogleOAuth2Config    *oauth2.Config
+	SessionStore          *CookieSessionStore
+	ForeignAccountCreator ForeignAccountCreator
+	SignupURL             string
+}
+
+const SessionKeyGoogleAuthState = "google_auth_state"
+
+func (g *GoogleAuthRedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var state string
+	g.SessionStore.DecodeAndRemove(w, r, SessionKeyGoogleAuthState, &state)
+	if state != r.FormValue("state") {
+		g.Log.Debug("State mismatch.", "session_auth_state", state, "redirect_auth_state")
+		g.SignupRedirect(w, r, NewFlash(FlashLevelError, "State mismatch."))
+		return
+	}
+
+	code := r.FormValue("code")
+
+	tok, err := g.GoogleOAuth2Config.Exchange(r.Context(), code, oauth2.AccessTypeOnline)
+	if err != nil {
+		g.Log.Error("Unable to exchange code.", "error", err.Error())
+		g.SignupRedirect(w, r, NewFlash(FlashLevelError, ClientMessageUnexpectedError))
+		return
+	}
+
+	res, err := g.GoogleOAuth2Config.Client(r.Context(), tok).Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		g.Log.Error("Unable to retrieve user information.", "error", err.Error())
+		g.SignupRedirect(w, r, NewFlash(FlashLevelError, ClientMessageUnexpectedError))
+		return
+	}
+
+	var result struct {
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+		Email   string `json:"email"`
+		Picture string `json:"picture"`
+	}
+	err = json.NewDecoder(res.Body).Decode(&result)
+	if err != nil {
+		g.Log.Error("Unable to decode userinfo query result.", "error", err.Error())
+		g.SignupRedirect(w, r, NewFlash(FlashLevelError, ClientMessageUnexpectedError))
+		return
+	}
+
+	account, user, err := g.ForeignAccountCreator.CreateForeignAccount(r.Context(), NewForeignAccount{
+		ProviderID: result.ID,
+		Provider:   ForeignProviderGoogle,
+		AvatarURL:  result.Picture,
+		Name:       result.Name,
+		Email:      result.Email,
+	})
+	if err != nil {
+		if errors.Is(err, ErrUserEmailInUse) {
+			g.Log.Debug("Email is already in use.", "email", result.Email)
+			g.SignupRedirect(w, r, NewFlash(FlashLevelError, "Email is already in use."))
+			return
+		}
+
+		g.Log.Error("Unable to create foreign account.", "error", err.Error())
+		g.SignupRedirect(w, r, NewFlash(FlashLevelError, ClientMessageUnexpectedError))
+		return
+	}
+
+	g.Log.Debug("New user was created with foreign account.",
+		"user_id", user.ID,
+		"foreign_account_provider", account.Provider,
+		"foreign_account_provider_id", account.ProviderID,
+	)
+	g.SignupRedirect(w, r, NewFlash(FlashLevelSuccess, "Successfully signed up."))
+}
+
+func (g *GoogleAuthRedirectHandler) SignupRedirect(w http.ResponseWriter, r *http.Request, flash *Flash) {
+	g.SessionStore.Encode(w, SessionKeyFlash, flash, SessionMaxAgeFlash)
+	http.Redirect(w, r, g.SignupURL, http.StatusSeeOther)
 }

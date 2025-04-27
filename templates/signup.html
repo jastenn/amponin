@@ -48,5 +48,12 @@
 			{{ with .FieldErrors.ConfirmPassword }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
 		</div>
 		<button type="submit" class="button button--full-width">Submit</button>
+
+		<div class="card__spacer card__spacer--with-text">or</div>
+
+		<a href="{{ .GoogleAuthRedirectURL }}" class="button button--secondary button--with-icon">
+			<img src="/static/logo-google.png" alt="" class="button__icon">
+			Google
+		</a>
 	</form>
 {{ end }}
