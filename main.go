@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	_ "github.com/lib/pq"
 	"golang.org/x/oauth2"
@@ -65,37 +66,65 @@ func main() {
 		},
 	}
 
+	mux := http.NewServeMux()
+
 	// embedFS contains a static directory which hosts all the static files
 	// needed to be served.
-	http.Handle("GET /static/", http.FileServerFS(embedFS))
-	http.Handle("/", &IndexHandler{
+	mux.Handle("GET /static/", http.FileServerFS(embedFS))
+	mux.Handle("/", &IndexHandler{
 		Log:             log,
+		SessionStore:    sessionStore,
 		NotFoundHandler: &NotFoundHandler{},
 	})
-	http.Handle("/signup", &SignupHandler{
+	mux.Handle("/signup", &SignupHandler{
 		Log:                     log,
 		SessionStore:            sessionStore,
 		MailSender:              mailSender,
 		VerificationRedirectURL: "/signup/verification",
 		GoogleOAuth2Config:      googleOAuth2Config,
 	})
-	http.Handle("/signup/verification", &SignupVerificationHandler{
+	mux.Handle("/signup/verification", &SignupVerificationHandler{
 		Log:                 log,
 		SessionStore:        sessionStore,
 		LocalAccountCreator: store,
 		SignupURL:           "/signup",
 	})
-	http.Handle("/auth/google", &GoogleAuthRedirectHandler{
+	mux.Handle("/auth/google", &GoogleAuthRedirectHandler{
 		Log:                   log,
 		GoogleOAuth2Config:    googleOAuth2Config,
 		SessionStore:          sessionStore,
 		ForeignAccountCreator: store,
-		SignupURL:             "/signup",
+		ForeignAccountGetter:  store,
+		SuccessRedirect:       "/",
+		LoginSessionMaxAge:    time.Hour * 24,
 	})
 
 	log.Info("Server running.", "address", *address)
-	err = http.ListenAndServe(*address, nil)
+	err = http.ListenAndServe(*address, mux)
 	if err != nil {
 		log.Error("Unable to start server.", err.Error())
 	}
+}
+
+type RecovererMiddlewareConfig struct {
+	Log          *slog.Logger
+	SessionStore *CookieSessionStore
+}
+
+func ApplyRecovererMiddleware(log *slog.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			err := recover()
+			if err != nil {
+				log.Error("Unexpected error occurred.", "error", err)
+				renderErrorPage(w, errorPageData{
+					Status:  http.StatusInternalServerError,
+					Message: clientMessageUnexpectedError,
+				})
+				return
+			}
+		}()
+
+		next.ServeHTTP(w, r)
+	})
 }

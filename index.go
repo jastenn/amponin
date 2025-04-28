@@ -8,21 +8,41 @@ import (
 
 type IndexHandler struct {
 	Log             *slog.Logger
+	SessionStore    *CookieSessionStore
 	NotFoundHandler http.Handler
 }
 
 var indexTemplate = template.Must(template.ParseFS(embedFS, "templates/base.html", "templates/index.html"))
 
+type indexPageData struct {
+	Flash *flash
+	basePageData
+}
+
 func (i *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSession *loginSession
+	i.SessionStore.Decode(r, sessionKeyLoginSession, &loginSession)
+
+	var flash *flash
+	i.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flash)
+
 	if r.URL.Path != "/" {
 		i.Log.Debug("Page not found.", "path", r.URL.Path)
 		i.NotFoundHandler.ServeHTTP(w, r)
 		return
 	}
-	err := RenderPage(w, indexTemplate, http.StatusOK, nil)
+	err := RenderPage(w, indexTemplate, http.StatusOK, &indexPageData{
+		basePageData: basePageData{
+			LoginSession: loginSession,
+		},
+		Flash: flash,
+	})
 	if err != nil {
 		i.Log.Error("Unexpected error occured.", "error", err)
-		RenderErrorPage(w, http.StatusInternalServerError, "Something went wrong. Please try again later.")
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusInternalServerError,
+			Message: "Something went wrong. Please try again later.",
+		})
 		return
 	}
 }

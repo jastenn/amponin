@@ -2,6 +2,17 @@
 	<title>Amponin</title>
 {{ end }}
 
+{{ define "header-beforeend" }}
+	{{ with .Flash }}
+		<div class="notification-bar {{ if eq .Level `success` -}} notification-bar--success
+			{{ else if eq .Level `warn` }} notification-bar--warn
+			{{ else if eq .Level `error` }} notification-bar--error {{ end }}"
+		>
+			{{ .Message }}
+		</div>
+	{{ end }}
+{{ end }}
+
 {{ define "content" }}
 	<h1>Hello from Amponin.</h1>
 {{ end }}

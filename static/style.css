@@ -68,6 +68,8 @@ header + * {
 	align-items: center;
 	justify-content: space-between;
 	padding: calc(var(--block-spacing-vertical) * .75) var(--block-spacing-horizontal);
+	--element-spacing-horizontal: 1.5rem;
+	--element-spacing-vertical: 1rem;
 }
 
 .navbar__logo {
@@ -77,7 +79,7 @@ header + * {
 .navbar__links {
 	display: flex;
 	align-items: center;
-	gap: var(--element-spacing-horizontal);
+	gap: calc(var(--element-spacing-horizontal)*.5);
 }
 
 .button {
@@ -245,4 +247,25 @@ header + * {
 .card__flash--success {
 	background-color: var(--color-success-muted);
 	color: var(--color-success-muted-inverse);
+}
+
+.notification-bar {
+	background-color: var(--color-primary-muted);
+	color: var(--color-primary);
+	padding: calc(var(--block-spacing-vertical)*.5) var(--block-spacing-horizontal);
+}
+
+.notification-bar--error {
+	background-color: var(--color-error);
+	color: var(--color-error-inverse);
+}
+
+.notification-bar--warn {
+	background-color: var(--color-warn);
+	color: var(--color-warn-inverse);
+}
+
+.notification-bar--success {
+	background-color: var(--color-success);
+	color: var(--color-success-inverse);
 }

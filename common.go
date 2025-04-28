@@ -2,6 +2,8 @@ package main
 
 import (
 	"embed"
+	"html/template"
+	"net/http"
 	"time"
 )
 
@@ -9,22 +11,41 @@ import (
 var embedFS embed.FS
 
 const (
-	NanoidGenerator = "ABCDEFGHIJKLMNPQRSTUVWXYZ123456789"
+	nanoidGenerator = "ABCDEFGHIJKLMNPQRSTUVWXYZ123456789"
 
-	ClientMessageUnexpectedError = "Unexpected error occurred. Please try again later."
+	clientMessageUnexpectedError = "Unexpected error occurred. Please try again later."
 
-	SessionMaxAgeFlash = time.Minute * 10
-	SessionKeyFlash    = "session_flash"
+	flashMaxAge     = time.Minute * 10
+	sessionKeyFlash = "session_flash"
 )
 
 const (
-	FlashLevelError   = "error"
-	FlashLevelWarn    = "warn"
-	FlashLevelSuccess = "success"
-	FlashLevelInfo    = "info"
+	flashLevelError   = "error"
+	flashLevelWarn    = "warn"
+	flashLevelSuccess = "success"
+	flashLevelInfo    = "info"
 )
 
-type Flash struct {
+type flash struct {
 	Level   string
 	Message string
+}
+
+type basePageData struct {
+	LoginSession *loginSession
+}
+
+var errorTemplate = template.Must(template.ParseFS(embedFS, "templates/base.html", "templates/error.html"))
+
+type errorPageData struct {
+	Status  int
+	Message string
+	basePageData
+}
+
+func renderErrorPage(w http.ResponseWriter, data errorPageData) {
+	err := RenderPage(w, errorTemplate, data.Status, data)
+	if err != nil {
+		panic(err)
+	}
 }

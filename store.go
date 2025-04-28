@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -88,7 +89,7 @@ func (c *PGStore) CreateForeignAccount(ctx context.Context, data NewForeignAccou
 
 	foreignAccount := &ForeignAccount{}
 	row = tx.QueryRowContext(ctx,
-		`INSERT INTO foreign_account (user_id, provider, provider_id)
+		`INSERT INTO foreign_accounts (user_id, provider, provider_id)
 		 VALUES ($1, $2, $3)
 		 RETURNING 
 			provider, provider_id, created_at`,
@@ -105,4 +106,41 @@ func (c *PGStore) CreateForeignAccount(ctx context.Context, data NewForeignAccou
 	}
 
 	return foreignAccount, user, nil
+}
+
+func (c *PGStore) GetForeignAccount(ctx context.Context, provider, providerID string) (*ForeignAccount, *User, error) {
+	var userID string
+	account := &ForeignAccount{}
+	row := c.DB.QueryRowContext(ctx,
+		`SELECT user_id, provider, provider_id, created_at
+		 FROM foreign_accounts
+		 WHERE provider = $1 AND provider_id = $2`,
+		provider, providerID,
+	)
+	err := row.Scan(&userID, &account.Provider, &account.ProviderID, &account.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, ErrNoAccount
+		}
+		return nil, nil, fmt.Errorf("failed to query foreign accounts table: %w", err)
+	}
+
+	user := &User{}
+	row = c.DB.QueryRowContext(ctx,
+		`SELECT
+			user_id, name, email, avatar_url,
+			created_at, updated_at
+		 FROM users
+		 WHERE user_id = $1`,
+		userID,
+	)
+	err = row.Scan(
+		&user.ID, &user.Name, &user.Email, &user.AvatarURL,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to query users table: %w", err)
+	}
+
+	return account, user, nil
 }

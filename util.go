@@ -21,8 +21,8 @@ func RenderPage(w http.ResponseWriter, tpl *template.Template, status int, data 
 	return nil
 }
 
-func NewFlash(level, message string) *Flash {
-	return &Flash{
+func NewFlash(level, message string) *flash {
+	return &flash{
 		Level:   level,
 		Message: message,
 	}
