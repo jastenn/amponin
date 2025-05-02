@@ -490,3 +490,16 @@ func (g *GoogleAuthRedirectHandler) Error(w http.ResponseWriter, r *http.Request
 	g.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
+
+type LogoutHandler struct {
+	Log             *slog.Logger
+	SessionStore    *CookieSessionStore
+	SuccessRedirect string
+}
+
+func (l *LogoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var login *loginSession
+	l.SessionStore.DecodeAndRemove(w, r, sessionKeyLoginSession, &login)
+	l.Log.Debug("User logged out.", "user_id", login.UserID)
+	http.Redirect(w, r, l.SuccessRedirect, http.StatusSeeOther)
+}

@@ -98,11 +98,16 @@ func main() {
 		SuccessRedirect:       "/",
 		LoginSessionMaxAge:    time.Hour * 24,
 	})
+	mux.Handle("/logout", &LogoutHandler{
+		Log:             log,
+		SessionStore:    sessionStore,
+		SuccessRedirect: "/",
+	})
 
 	log.Info("Server running.", "address", *address)
 	err = http.ListenAndServe(*address, mux)
 	if err != nil {
-		log.Error("Unable to start server.", err.Error())
+		log.Error("Unable to start server.", "error", err.Error())
 	}
 }
 
