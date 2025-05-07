@@ -108,10 +108,10 @@ func (c *PGStore) CreateForeignAccount(ctx context.Context, data NewForeignAccou
 	return foreignAccount, user, nil
 }
 
-func (c *PGStore) GetForeignAccount(ctx context.Context, provider, providerID string) (*ForeignAccount, *User, error) {
+func (p *PGStore) GetForeignAccount(ctx context.Context, provider, providerID string) (*ForeignAccount, *User, error) {
 	var userID string
 	account := &ForeignAccount{}
-	row := c.DB.QueryRowContext(ctx,
+	row := p.DB.QueryRowContext(ctx,
 		`SELECT user_id, provider, provider_id, created_at
 		 FROM foreign_accounts
 		 WHERE provider = $1 AND provider_id = $2`,
@@ -126,7 +126,7 @@ func (c *PGStore) GetForeignAccount(ctx context.Context, provider, providerID st
 	}
 
 	user := &User{}
-	row = c.DB.QueryRowContext(ctx,
+	row = p.DB.QueryRowContext(ctx,
 		`SELECT
 			user_id, name, email, avatar_url,
 			created_at, updated_at
@@ -140,6 +140,46 @@ func (c *PGStore) GetForeignAccount(ctx context.Context, provider, providerID st
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to query users table: %w", err)
+	}
+
+	return account, user, nil
+}
+
+func (p *PGStore) GetLocalAccount(ctx context.Context, email string) (*LocalAccount, *User, error) {
+	user := &User{}
+	row := p.DB.QueryRowContext(ctx,
+		`SELECT
+			user_id, name, email, avatar_url,
+			created_at, updated_at
+		 FROM users
+		 WHERE email = $1`,
+		email,
+	)
+	err := row.Scan(
+		&user.ID, &user.Name, &user.Email, &user.AvatarURL,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, ErrNoUser
+		}
+
+		return nil, nil, fmt.Errorf("unable to query users table: %w", err)
+	}
+
+	account := &LocalAccount{}
+	row = p.DB.QueryRowContext(ctx,
+		`SELECT local_account_id, password_hash, created_at, updated_at
+		 FROM local_accounts
+		 WHERE user_id = $1`,
+		user.ID,
+	)
+	err = row.Scan(&account.ID, &account.PasswordHash, &account.CreatedAt, &account.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, ErrNoAccount
+		}
+		return nil, nil, fmt.Errorf("unable to query local_accounts table: %w", err)
 	}
 
 	return account, user, nil

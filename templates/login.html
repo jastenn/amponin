@@ -1,3 +1,43 @@
 {{ define "head" }}
-	<title>Signup - Amponin</title>
+	<title>Login - Amponin</title>
+{{ end }}
+
+{{ define "content" }}
+	<form class="card card--sm" method="post">
+		<h1 class="card__heading">Login</h1>		
+		{{ with .Flash }} 
+		<div class="card__flash 
+				{{ if eq .Level `success` -}} card__flash--success
+				{{- else if eq .Level `warn` -}} card__flash--warn 
+				{{- else if eq .Level `error` -}} card__flash--error {{- end -}}"
+			>
+				{{ .Message }}
+			</div>	
+		{{ end }}
+		
+		<div>
+			<label for="email" class="form-label">Email</label>
+			<input type="email" name="email" value="{{ .FieldValues.Email }}"
+				class="form-control {{ with .FieldErrors.Email }} form-control--invalid {{ end }}"
+				{{ with .FieldErrors.Email }} aria-invalid="true" {{ end }}
+			>
+			{{ with .FieldErrors.Email }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+		<div>
+			<label for="password" class="form-label">Password</label>
+			<input type="password" name="password" value="{{ .FieldValues.Password }}"
+				class="form-control {{ with .FieldErrors.Password }} form-control--invalid {{ end }}"
+				{{ with .FieldErrors.Password }} aria-invalid="true" {{ end }}
+			>
+			{{ with .FieldErrors.Password }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+		<button type="submit" class="button button--full-width">Submit</button>
+
+		<div class="card__spacer card__spacer--with-text">or</div>
+
+		<a href="{{ .GoogleAuthCodeURL }}" class="button button--secondary button--with-icon">
+			<img src="/static/logo-google.png" alt="" class="button__icon">
+			Google
+		</a>
+	</form>
 {{ end }}

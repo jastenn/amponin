@@ -13,8 +13,14 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
+const environmentProduction = "production"
+const environmentDevelopment = "development"
+
 func main() {
+	const loginSessionMaxAge = time.Hour * 24
+
 	address := flag.String("address", ":8080", "network address to run on")
+	environment := flag.String("environment", "production", "current environment that this application will run on. (values: development or production)")
 	database := flag.String("database", "", "database url to store application data.")
 	smtpEmail := flag.String("smtp-email", "", "email address to be used in sending email")
 	smtpPassword := flag.String("smtp-password", "", "password to be used in smtp email address authentication")
@@ -47,7 +53,11 @@ func main() {
 		panic("unable to open database connection: " + err.Error())
 	}
 
-	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logOptions := slog.HandlerOptions{}
+	if *environment == environmentDevelopment {
+		logOptions.Level = slog.LevelDebug
+	}
+	log := slog.New(slog.NewTextHandler(os.Stdout, &logOptions))
 	sessionStore := NewCookieSessionStore("sikret", CookieSessionStoreOptions{
 		Path: "/",
 	})
@@ -91,17 +101,25 @@ func main() {
 	})
 	mux.Handle("/auth/google", &GoogleAuthRedirectHandler{
 		Log:                   log,
-		GoogleOAuth2Config:    googleOAuth2Config,
+		GoogleAuthConfig:      googleOAuth2Config,
 		SessionStore:          sessionStore,
 		ForeignAccountCreator: store,
 		ForeignAccountGetter:  store,
 		SuccessRedirect:       "/",
-		LoginSessionMaxAge:    time.Hour * 24,
+		LoginSessionMaxAge:    loginSessionMaxAge,
 	})
 	mux.Handle("/logout", &LogoutHandler{
 		Log:             log,
 		SessionStore:    sessionStore,
 		SuccessRedirect: "/",
+	})
+	mux.Handle("/login", &LoginHandler{
+		Log:                log,
+		SessionStore:       sessionStore,
+		GoogleAuthConfig:   googleOAuth2Config,
+		LocalAccountGetter: store,
+		LoginSessionMaxAge: loginSessionMaxAge,
+		SuccessRedirect:    "/",
 	})
 
 	log.Info("Server running.", "address", *address)
