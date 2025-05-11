@@ -4,7 +4,8 @@
 	--color-primary: #191D23;
 	--color-primary-hover: #3E4043;
 	--color-primary-inverse: white;
-	--color-primary-muted: #DBDFE6;
+	--color-primary-muted: #8793AB;
+	--color-primary-muted-focus: #434D60;
 	--color-primary-muted-inverse: #191D23;
 	--color-secondary: #F2F2F2;
 	--color-secondary-hover: #E9E9E9;
@@ -54,6 +55,27 @@ img {
 
 header + * {
 	margin-top: 4rem;
+}
+
+a {
+	color: var(--color-primary-muted, gray)
+}
+
+a:hover,
+a:focus {
+	color: var(--color-primary-muted-focus, darkGray)
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border-width: 0;
 }
 
 .container {
@@ -268,4 +290,93 @@ header + * {
 .notification-bar--success {
 	background-color: var(--color-success);
 	color: var(--color-success-inverse);
+}
+
+.user-menu {
+	position: relative;
+}
+
+.user-menu__button--avatar {
+	display: block;
+	height: 3rem;
+	width: 3rem;
+	border-radius: 99999px;
+	overflow: hidden;
+	padding: 0;
+}
+
+.user-menu__items {
+	position: absolute;
+	top: 100%;
+	right: 0;
+	transform: translateY(1rem);
+	width: 13rem;
+	background-color: white;
+	border: .125rem solid var(--color-primary);
+	box-shadow: .25rem .25rem 0 0 var(--color-primary);
+	border-radius: var(--element-radius);
+	display: none;
+}
+
+.user-menu__items hr {
+	padding: 0;
+	margin: 0 var(--element-spacing-horizontal);
+	opacity: .25;
+}
+
+.user-menu--active .user-menu__items {
+	display: block;
+}
+
+.user-menu__item * {
+	padding: 0;
+	margin: 0;
+}
+
+.user-menu__item {
+	display: flex;
+	gap: 1rem;
+	align-items: center;
+	color: inherit;
+	text-decoration: none;
+	text-transform: capitalize;
+	text-align: center;
+	padding: var(--element-spacing-vertical) var(--element-spacing-horizontal);
+	border-radius: var(--element-radius);
+}
+
+.user-menu__item > * {
+	flex-grow: 1;
+	overflow: hidden;
+}
+
+.user-menu__profile-name {
+	text-overflow: ellipsis;
+	overflow: hidden;
+}
+
+.user-menu__item-icon {
+	width: 1.25rem;
+	height: 1.25rem;
+	flex-grow: 0;
+	flex-shrink: 0;
+}
+
+.user-menu__item--profile {
+	text-align: left;
+	font-size: 1.125rem;
+	line-height: 1;
+}
+
+.user-menu__item--profile .user-menu__item-icon {
+	width: 2.5rem;
+	height: 2.5rem;
+	overflow: hidden;
+	border-radius: 9999px;
+}
+
+.user-menu__item--profile a {
+	text-transform: uppercase;
+	font-size: .875rem;
+	outline: none;
 }
