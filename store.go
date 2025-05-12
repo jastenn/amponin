@@ -184,3 +184,51 @@ func (p *PGStore) GetLocalAccount(ctx context.Context, email string) (*LocalAcco
 
 	return account, user, nil
 }
+
+func (p *PGStore) RegisterShelter(ctx context.Context, userID string, data NewShelter) (*Shelter, error) {
+	tx, err := p.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("unable to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	row := tx.QueryRowContext(
+		ctx,
+		`INSERT INTO shelters (
+			name, address, coordinates, description
+		) VALUES (
+			$1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), $5
+		) RETURNING
+			shelter_id, name, address,
+			ST_X(coordinates), ST_Y(coordinates), description,
+			created_at, updated_at`,
+		data.Name, data.Address, data.Coordinates.Longtude, data.Coordinates.Latitude, data.Description,
+	)
+
+	shelter := &Shelter{}
+	err = row.Scan(
+		&shelter.ID, &shelter.Name, &shelter.Address,
+		&shelter.Coordinates.Longtude, &shelter.Coordinates.Latitude, &shelter.Description,
+		&shelter.CreatedAt, &shelter.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to insert data to shelters table: %w", err)
+	}
+
+	_, err = tx.ExecContext(
+		ctx,
+		`INSERT INTO shelter_roles (user_id, role, shelter_id)
+		 VALUES ($1, $2, $3)`,
+		userID, ShelterRoleAdmin, shelter.ID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to insert data to shelter roles table: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w:", err)
+	}
+
+	return shelter, nil
+}

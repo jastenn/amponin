@@ -1,0 +1,64 @@
+{{ define "head" }}
+	<title>Register Shelter - Amponin</title>
+
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+	     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+	     crossorigin=""/>
+	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+	     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+	     crossorigin=""></script>
+
+	<script src="/static/scripts/components/coordinates-input.js" defer></script>
+{{ end }}
+
+{{ define "content" }}
+	<form class="card" method="post">
+		<h1 class="card__heading">Register Shelter</h1>		
+		{{ with .Flash }} 
+		<div class="card__flash 
+				{{ if eq .Level `success` -}} card__flash--success
+				{{- else if eq .Level `warn` -}} card__flash--warn 
+				{{- else if eq .Level `error` -}} card__flash--error {{- end -}}"
+			>
+				{{ .Message }}
+			</div>	
+		{{ end }}
+		
+		<div>
+			<label for="name" class="form-label">Name</label>
+			<input type="text" name="name" value="{{ .FieldValues.Name }}"
+				class="form-control {{ with .FieldErrors.Name }} form-control--invalid {{ end }}"
+				{{ with .FieldErrors.Name }} aria-invalid="true" {{ end }}
+			>
+			{{ with .FieldErrors.Name }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+
+		<div>
+			<label for="address" class="form-label">Address</label>
+			<input type="text" name="address" value="{{ .FieldValues.Address }}"
+				class="form-control {{ with .FieldErrors.Address }} form-control--invalid {{ end }}"
+				{{ with .FieldErrors.Address }} aria-invalid="true" {{ end }}
+			>
+			{{ with .FieldErrors.Address }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+
+		<div>
+			<label for="coordinates" class="form-label">Coordinates</label>
+			<coordinates-input name="coordinates" class="form-control" value="{{ .FieldValues.Coordinates }}"></coordinates-input>
+			{{ with .FieldErrors.Coordinates }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+
+		<div>
+			<label for="description" class="form-label">Description</label>
+			<textarea type="text" name="description"
+				class="form-control {{ with .FieldErrors.Description }} form-control--invalid {{ end }}"
+				{{ with .FieldErrors.Address }} aria-invalid="true" {{ end }}
+			>
+				{{- .FieldValues.Description -}}
+			</textarea>
+			{{ with .FieldErrors.Description }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+
+		<button type="submit" class="button button--full-width">Submit</button>
+	</form>
+{{ end }}

@@ -97,7 +97,7 @@ type SignupHandler struct {
 	GoogleOAuth2Config      *oauth2.Config
 }
 
-var signupPage = template.Must(template.ParseFS(embedFS, "templates/base.html", "templates/signup.html"))
+var signupPage = template.Must(template.ParseFS(embedFS, "templates/pages/signup.html", "templates/pages/base.html"))
 
 type signupPageData struct {
 	basePageData
@@ -299,7 +299,7 @@ type signupVerification struct {
 	VerificationCode string
 }
 
-var signupVerificationPage = template.Must(template.ParseFS(embedFS, "templates/signup-verification.html", "templates/base.html"))
+var signupVerificationPage = template.Must(template.ParseFS(embedFS, "templates/pages/signup-verification.html", "templates/pages/base.html"))
 
 type signupVerificationPageData struct {
 	basePageData
@@ -418,7 +418,7 @@ type loginErrors struct {
 	Password string
 }
 
-var loginPage = template.Must(template.ParseFS(embedFS, "templates/login.html", "templates/base.html"))
+var loginPage = template.Must(template.ParseFS(embedFS, "templates/pages/login.html", "templates/pages/base.html"))
 
 func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var loginSessionData *loginSession

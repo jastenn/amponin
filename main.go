@@ -108,11 +108,6 @@ func main() {
 		SuccessRedirect:       "/",
 		LoginSessionMaxAge:    loginSessionMaxAge,
 	})
-	mux.Handle("/logout", &LogoutHandler{
-		Log:             log,
-		SessionStore:    sessionStore,
-		SuccessRedirect: "/",
-	})
 	mux.Handle("/login", &LoginHandler{
 		Log:                log,
 		SessionStore:       sessionStore,
@@ -120,6 +115,16 @@ func main() {
 		LocalAccountGetter: store,
 		LoginSessionMaxAge: loginSessionMaxAge,
 		SuccessRedirect:    "/",
+	})
+	mux.Handle("/logout", &LogoutHandler{
+		Log:             log,
+		SessionStore:    sessionStore,
+		SuccessRedirect: "/",
+	})
+	mux.Handle("/shelter/register", &RegisterShelterHandler{
+		Log:             log,
+		SessionStore:    sessionStore,
+		ShelterRegistry: store,
 	})
 
 	log.Info("Server running.", "address", *address)

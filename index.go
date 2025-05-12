@@ -12,7 +12,7 @@ type IndexHandler struct {
 	NotFoundHandler http.Handler
 }
 
-var indexTemplate = template.Must(template.ParseFS(embedFS, "templates/base.html", "templates/index.html"))
+var indexTemplate = template.Must(template.ParseFS(embedFS, "templates/pages/index.html", "templates/pages/base.html"))
 
 type indexPageData struct {
 	Flash *flash

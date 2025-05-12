@@ -35,7 +35,7 @@ type basePageData struct {
 	LoginSession *loginSession
 }
 
-var errorTemplate = template.Must(template.ParseFS(embedFS, "templates/base.html", "templates/error.html"))
+var errorTemplate = template.Must(template.ParseFS(embedFS, "templates/pages/base.html", "templates/pages/error.html"))
 
 type errorPageData struct {
 	Status  int
