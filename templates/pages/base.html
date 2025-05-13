@@ -28,7 +28,7 @@
 						<div id="user-menu-items" class="user-menu__items">
 							<div class="user-menu__item user-menu__item--profile">
 								<div class="user-menu__item-icon">
-									<img src="{{ with .AvatarURL }} {{ . }} {{ else -}} /static/default-user-avatar.png {{- end }}" alt="">
+									<img src="{{ with .AvatarURL -}} {{ . }} {{- else -}} /static/default-user-avatar.png {{- end }}" alt="">
 								</div>
 								<div>
 									<div class="user-menu__profile-name-wrapper">
@@ -58,7 +58,7 @@
 				{{ else }}
 					<div class="navbar__links">
 						<a href="/signup" class="button button--outline">Signup</a>
-						<a href="login" class="button">Login</a>
+						<a href="/login" class="button">Login</a>
 					</div>
 				{{ end }}
 			</nav>

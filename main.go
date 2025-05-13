@@ -76,6 +76,10 @@ func main() {
 		},
 	}
 
+	notFoundHandler := &NotFoundHandler{
+		SessionStore: sessionStore,
+	}
+
 	mux := http.NewServeMux()
 
 	// embedFS contains a static directory which hosts all the static files
@@ -84,7 +88,7 @@ func main() {
 	mux.Handle("/", &IndexHandler{
 		Log:             log,
 		SessionStore:    sessionStore,
-		NotFoundHandler: &NotFoundHandler{},
+		NotFoundHandler: notFoundHandler,
 	})
 	mux.Handle("/signup", &SignupHandler{
 		Log:                     log,
@@ -125,6 +129,12 @@ func main() {
 		Log:             log,
 		SessionStore:    sessionStore,
 		ShelterRegistry: store,
+	})
+	mux.Handle("/shelter/{shelter_id}", &GetShelterByIDHandler{
+		Log:               log,
+		SessionStore:      sessionStore,
+		ShelterGetterByID: store,
+		NotFoundHandler:   notFoundHandler,
 	})
 
 	log.Info("Server running.", "address", *address)

@@ -232,3 +232,31 @@ func (p *PGStore) RegisterShelter(ctx context.Context, userID string, data NewSh
 
 	return shelter, nil
 }
+
+func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error) {
+	row := p.DB.QueryRowContext(ctx,
+		`SELECT
+			shelter_id, name, address,
+			ST_Y(coordinates), ST_X(coordinates), description,
+			created_at, updated_at
+		 FROM shelters
+		 WHERE shelter_id = $1`,
+		shelterID,
+	)
+
+	result := &Shelter{}
+	err := row.Scan(
+		&result.ID, &result.Name, &result.Address,
+		&result.Coordinates.Latitude, &result.Coordinates.Longtude, &result.Description,
+		&result.CreatedAt, &result.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoShelter
+		}
+
+		return nil, fmt.Errorf("unable to query shelters table: %w", err)
+	}
+
+	return result, nil
+}

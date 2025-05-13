@@ -319,11 +319,18 @@ textarea.form-control--invalid {
 
 .user-menu__button--avatar {
 	display: block;
-	height: 3rem;
-	width: 3rem;
+	height: 2.5rem;
+	width: 2.5rem;
 	border-radius: 99999px;
 	overflow: hidden;
 	padding: 0;
+	border: solid .125rem var(--color-primary);	
+}
+
+.user-menu__button--avatar > img {  
+	height: 100%;
+	width: 100%;
+	object-fit: cover;
 }
 
 .user-menu__items {

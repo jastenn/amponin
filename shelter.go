@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"time"
 )
+
+var ErrNoShelter = errors.New("no shelter found")
 
 type ShelterRole string
 
@@ -23,6 +26,7 @@ type Shelter struct {
 	ID          string
 	Name        string
 	Address     string
+	AvatarURL   string
 	Coordinates Coordinates
 	Description string
 	CreatedAt   time.Time
@@ -222,4 +226,65 @@ func (rh *RegisterShelterHandler) renderPage(w http.ResponseWriter, status int, 
 		})
 		return
 	}
+}
+
+type GetShelterByIDHandler struct {
+	Log               *slog.Logger
+	SessionStore      *CookieSessionStore
+	ShelterGetterByID shelterGetterByID
+	NotFoundHandler   http.Handler
+}
+
+type shelterGetterByID interface {
+	GetShelterByID(ctx context.Context, id string) (*Shelter, error)
+}
+
+type shelterByIDPageData struct {
+	basePageData
+	Shelter
+}
+
+var getShelterByIDPage = template.Must(template.ParseFS(embedFS, "templates/pages/shelter/get_by_id.html", "templates/pages/base.html"))
+
+func (g *GetShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	shelterID := r.PathValue("shelter_id")
+	var loginSessionData *loginSession
+	g.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+	shelter, err := g.ShelterGetterByID.GetShelterByID(r.Context(), shelterID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelter) {
+			g.Log.Info("Shelter not found.", "shelter_id", shelterID)
+			g.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		g.Log.Error("Unexpected error while getting shelter by id.", "error", err.Error())
+		return
+	}
+
+	err = RenderPage(w, getShelterByIDPage, http.StatusOK, shelterByIDPageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		Shelter: *shelter,
+	})
+	if err != nil {
+		g.Log.Error("Unexpected error while rendering page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+	return
 }
