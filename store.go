@@ -219,7 +219,7 @@ func (p *PGStore) RegisterShelter(ctx context.Context, userID string, data NewSh
 		ctx,
 		`INSERT INTO shelter_roles (user_id, role, shelter_id)
 		 VALUES ($1, $2, $3)`,
-		userID, ShelterRoleAdmin, shelter.ID,
+		userID, ShelterRoleSuperAdmin, shelter.ID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to insert data to shelter roles table: %w", err)
@@ -236,9 +236,9 @@ func (p *PGStore) RegisterShelter(ctx context.Context, userID string, data NewSh
 func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error) {
 	row := p.DB.QueryRowContext(ctx,
 		`SELECT
-			shelter_id, name, address,
-			ST_Y(coordinates), ST_X(coordinates), description,
-			created_at, updated_at
+			shelter_id, name, avatar_url, address, 
+			ST_Y(coordinates), ST_X(coordinates), description, created_at,
+			updated_at
 		 FROM shelters
 		 WHERE shelter_id = $1`,
 		shelterID,
@@ -246,7 +246,7 @@ func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelte
 
 	result := &Shelter{}
 	err := row.Scan(
-		&result.ID, &result.Name, &result.Address,
+		&result.ID, &result.Name, &result.AvatarURL, &result.Address,
 		&result.Coordinates.Latitude, &result.Coordinates.Longtude, &result.Description,
 		&result.CreatedAt, &result.UpdatedAt,
 	)
@@ -256,6 +256,49 @@ func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelte
 		}
 
 		return nil, fmt.Errorf("unable to query shelters table: %w", err)
+	}
+
+	return result, nil
+}
+
+func (p *PGStore) FindManagedShelter(ctx context.Context, userID string) ([]*ManagedShelterResult, error) {
+	rows, err := p.DB.QueryContext(ctx,
+		`SELECT
+			s.shelter_id, name, avatar_url, address, 
+			ST_Y(coordinates), ST_X(coordinates), description, created_at,
+			updated_at, role
+		 FROM shelters as s
+		 JOIN shelter_roles as r USING(shelter_id)	
+		 WHERE r.user_id = $1`,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query shelter with roles: %w", err)
+	}
+	defer rows.Close()
+
+	var result []*ManagedShelterResult
+	for rows.Next() {
+		shelter := &Shelter{}
+		var role string
+		err := rows.Scan(
+			&shelter.ID, &shelter.Name, &shelter.AvatarURL, &shelter.Address,
+			&shelter.Coordinates.Latitude, &shelter.Coordinates.Longtude, &shelter.Description, &shelter.CreatedAt,
+			&shelter.UpdatedAt, &role,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan result item: %w", err)
+		}
+
+		result = append(result, &ManagedShelterResult{
+			Role:    ShelterRole(role),
+			Shelter: shelter,
+		})
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan result: %w", err)
 	}
 
 	return result, nil

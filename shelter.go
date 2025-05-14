@@ -16,6 +16,19 @@ var ErrNoShelter = errors.New("no shelter found")
 
 type ShelterRole string
 
+func (s ShelterRole) String() string {
+	switch s {
+	case ShelterRoleSuperAdmin:
+		return "Super Admin"
+	case ShelterRoleAdmin:
+		return "Admin"
+	case ShelterRoleEditor:
+		return "Editor"
+	default:
+		panic("invalid shelter role")
+	}
+}
+
 const (
 	ShelterRoleSuperAdmin ShelterRole = "super_admin"
 	ShelterRoleAdmin      ShelterRole = "admin"
@@ -26,7 +39,7 @@ type Shelter struct {
 	ID          string
 	Name        string
 	Address     string
-	AvatarURL   string
+	AvatarURL   *string
 	Coordinates Coordinates
 	Description string
 	CreatedAt   time.Time
@@ -287,4 +300,71 @@ func (g *GetShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 	return
+}
+
+type ListManagedShelterHandler struct {
+	Log                  *slog.Logger
+	SessionStore         *CookieSessionStore
+	ManagedShelterFinder managedShelterFinder
+}
+
+type ManagedShelterResult struct {
+	Role ShelterRole
+	*Shelter
+}
+
+type managedShelterFinder interface {
+	FindManagedShelter(ctx context.Context, userID string) ([]*ManagedShelterResult, error)
+}
+
+type listManagedShelterPageData struct {
+	basePageData
+	Shelters []*ManagedShelterResult
+}
+
+var listManagedShelterPage = template.Must(template.ParseFS(embedFS, "templates/pages/shelter/list_managed.html", "templates/pages/base.html"))
+
+func (l *ListManagedShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	l.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+
+	if loginSessionData == nil {
+		l.Log.Debug("User is not logged in.")
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized. Please login first.",
+		})
+		return
+	}
+
+	result, err := l.ManagedShelterFinder.FindManagedShelter(r.Context(), loginSessionData.UserID)
+	if err != nil {
+		l.Log.Error("Unexpected error while finding shelter.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+
+	err = RenderPage(w, listManagedShelterPage, http.StatusOK, listManagedShelterPageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		Shelters: result,
+	})
+	if err != nil {
+		l.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
 }

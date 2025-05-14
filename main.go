@@ -125,6 +125,11 @@ func main() {
 		SessionStore:    sessionStore,
 		SuccessRedirect: "/",
 	})
+	mux.Handle("/shelter", &ListManagedShelterHandler{
+		Log:                  log,
+		SessionStore:         sessionStore,
+		ManagedShelterFinder: store,
+	})
 	mux.Handle("/shelter/register", &RegisterShelterHandler{
 		Log:             log,
 		SessionStore:    sessionStore,
