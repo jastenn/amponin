@@ -52,7 +52,7 @@
 			<label for="description" class="form-label">Description</label>
 			<textarea type="text" name="description"
 				class="form-control {{ with .FieldErrors.Description }} form-control--invalid {{ end }}"
-				{{ with .FieldErrors.Address }} aria-invalid="true" {{ end }}
+				{{ with .FieldErrors.Description }} aria-invalid="true" {{ end }}
 			>
 				{{- .FieldValues.Description -}}
 			</textarea>
