@@ -3,9 +3,13 @@ package main
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
+
+	"github.com/lib/pq"
 )
 
 type PGStore struct {
@@ -302,4 +306,118 @@ func (p *PGStore) FindManagedShelter(ctx context.Context, userID string) ([]*Man
 	}
 
 	return result, nil
+}
+
+func (p *PGStore) GetShelterRole(ctx context.Context, shelterID, userID string) (ShelterRole, error) {
+	row := p.DB.QueryRowContext(ctx,
+		`SELECT role FROM shelter_roles
+		 WHERE shelter_id = $1 AND user_id = $2`,
+		shelterID, userID,
+	)
+
+	var role string
+	err := row.Scan(&role)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNoShelterRole
+		}
+
+		return "", fmt.Errorf("failed to query shelter roles table: %w", err)
+	}
+
+	return ShelterRole(role), nil
+}
+
+func (p *PGStore) RegisterPet(ctx context.Context, shelterID string, data NewPet) (*Pet, error) {
+	images := ConvertImagesToPGImages(data.Images)
+
+	row := p.DB.QueryRowContext(
+		ctx,
+		`INSERT INTO pets (
+			name, gender, type, images,
+			description	
+		) VALUES (
+			$1, $2, $3, $4,
+			$5
+		) RETURNING 
+			pet_id, name, gender, type,
+			images, description, registered_at, updated_at`,
+		data.Name, data.Gender, data.Type, pq.Array(images),
+		data.Description,
+	)
+	var result struct {
+		ID           string
+		Name         string
+		Gender       string
+		Type         string
+		Images       []pgImage
+		Description  string
+		RegisteredAt time.Time
+		UpdatedAt    time.Time
+	}
+	err := row.Scan(
+		&result.ID, &result.Name, &result.Gender, &result.Type,
+		pq.Array(&result.Images), &result.Description, &result.RegisteredAt, &result.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to insert into pets table: %w", err)
+	}
+
+	return &Pet{
+		ID:           result.ID,
+		Name:         result.Name,
+		Gender:       Gender(result.Gender),
+		Type:         PetType(result.Type),
+		Images:       ConvertPGImagesToImages(result.Images),
+		Description:  result.Description,
+		RegisteredAt: result.RegisteredAt,
+		UpdatedAt:    result.UpdatedAt,
+	}, nil
+}
+
+type pgImage struct {
+	Provider ImageProvider
+	URL      string
+}
+
+func (p pgImage) Value() (driver.Value, error) {
+	return fmt.Sprintf("(%s,%s)", p.Provider, p.URL), nil
+}
+
+func (p *pgImage) Scan(src any) error {
+	s := string(src.([]byte))
+	s = s[1 : len(s)-1]
+	results := strings.Split(s, ",")
+	if l := len(results); l != 2 {
+		return fmt.Errorf("invalid scan function: expects 2 values, received %v", l)
+	}
+
+	p.Provider = ImageProvider(results[0])
+	p.URL = results[1]
+
+	return nil
+}
+
+func ConvertPGImagesToImages(pgImages []pgImage) []Image {
+	var result []Image
+	for _, pgImage := range pgImages {
+		result = append(result, Image{
+			Provider: pgImage.Provider,
+			URL:      pgImage.URL,
+		})
+	}
+
+	return result
+}
+
+func ConvertImagesToPGImages(images []Image) []pgImage {
+	var result []pgImage
+	for _, image := range images {
+		result = append(result, pgImage{
+			Provider: image.Provider,
+			URL:      image.URL,
+		})
+	}
+
+	return result
 }

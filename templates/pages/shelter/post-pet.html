@@ -1,0 +1,96 @@
+{{ define "head" }}
+	<title>Post Pet - Amponin</title>
+
+	<script src="/static/scripts/pages/shelters/post-pet.js" defer></script>
+{{ end }}
+
+{{ define "content" }}
+	<form class="card" method="post" enctype="multipart/form-data">
+		<h1 class="card__heading">Post Pet</h1>		
+		{{ with .Flash }} 
+		<div class="card__flash 
+				{{ if eq .Level `success` -}} card__flash--success
+				{{- else if eq .Level `warn` -}} card__flash--warn 
+				{{- else if eq .Level `error` -}} card__flash--error {{- end -}}"
+			>
+				{{ .Message }}
+			</div>	
+		{{ end }}
+
+		<div>
+			<label for="name" class="form-label">Name</label>
+			<input type="text" name="name" value="{{ .FieldValues.Name }}"
+				class="form-control {{ with .FieldErrors.Name }} form-control--invalid {{ end }}"
+				{{ with .FieldErrors.Name }} aria-invalid="true" {{ end }}
+			>
+			{{ with .FieldErrors.Name }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+
+		<div>
+			<label for="gender" class="form-label">Gender</label>
+			<select id="gender" name="gender" class="form-control {{ with .FieldErrors.Type -}} form-control--invalid {{- end }} "
+				{{ with .FieldErrors.Gender }} aria-invalid="true" {{ end }}
+			>
+				<option value="male" {{ if eq .FieldValues.Gender `male` }} selected {{ end }}>Male</option>	
+				<option value="female" {{ if eq .FieldValues.Gender `female` }} selected {{ end }}>Female</option>	
+			</select>
+			{{ with .FieldErrors.Gender }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+
+		<div>
+			<label for="type" class="form-label">Type</label>
+			<select id="type" name="type" class="form-control {{ with .FieldErrors.Type -}} form-control--invalid {{- end }} "
+				{{ with .FieldErrors.Type }} aria-invalid="true" {{ end }}
+			>
+				<option value="cat" {{ if eq .FieldValues.Gender `cat` }} selected {{ end }}>Cat</option>	
+				<option value="dog" {{ if eq .FieldValues.Gender `dog` }} selected {{ end }}>Dog</option>	
+			</select>
+			{{ with .FieldErrors.Gender }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+		
+		<div>
+			<div class="form-label">Images</div>
+			<div data-js-images-input class="images-input">
+				<div class="images-input__control">
+					<img src="/static/images-icon.png" alt="" class="images-input__icon">	
+					<label for="images" class="button button--with-icon button--small-icon">
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="button__icon">
+							<path d="M7.25 10.25a.75.75 0 0 0 1.5 0V4.56l2.22 2.22a.75.75 0 1 0 1.06-1.06l-3.5-3.5a.75.75 0 0 0-1.06 0l-3.5 3.5a.75.75 0 0 0 1.06 1.06l2.22-2.22v5.69Z" />
+							<path d="M3.5 9.75a.75.75 0 0 0-1.5 0v1.5A2.75 2.75 0 0 0 4.75 14h6.5A2.75 2.75 0 0 0 14 11.25v-1.5a.75.75 0 0 0-1.5 0v1.5c0 .69-.56 1.25-1.25 1.25h-6.5c-.69 0-1.25-.56-1.25-1.25v-1.5Z" />
+						</svg>
+						<span>Select from files</span>
+					</label>
+					<input data-js-images-input-control id="images" type="file" name="images" class="sr-only" multiple="true">
+				</div>	
+				<div class="images-input__preview">
+					<div>Please upload 4 images.</div>
+					<div data-js-images-input-preview-container class="images-input__preview-list"></div>
+					<template id="images-input-preview-item-template">
+						<div class="images-input__preview-item">
+							<button type="button" data-js-images-input-preview-remove-control type="text" class="images-input__preview-item-control">
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+									<path fillRule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm2.78-4.22a.75.75 0 0 1-1.06 0L8 9.06l-1.72 1.72a.75.75 0 1 1-1.06-1.06L6.94 8 5.22 6.28a.75.75 0 0 1 1.06-1.06L8 6.94l1.72-1.72a.75.75 0 1 1 1.06 1.06L9.06 8l1.72 1.72a.75.75 0 0 1 0 1.06Z" clipRule="evenodd" />
+								</svg>
+							</button>
+							<img data-js-images-input-preview-image class="images-input__preview-item-image" src="/static/placeholder-image.jpg">
+						</div>
+					</template>
+				</div>
+			</div>
+			{{ with .FieldErrors.Images }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+
+		<div>
+			<label for="description" class="form-label">Description</label>
+			<textarea type="text" name="description"
+				class="form-control {{ with .FieldErrors.Description }} form-control--invalid {{ end }}"
+				{{ with .FieldErrors.Description }} aria-invalid="true" {{ end }}
+			>
+				{{- .FieldValues.Description -}}
+			</textarea>
+			{{ with .FieldErrors.Description }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+
+		<button type="submit" class="button button--full-width">Submit</button>
+	</form>
+{{ end }}

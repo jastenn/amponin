@@ -167,6 +167,10 @@ a:not([class]):focus {
 	width: var(--icon-size);
 }
 
+.button--small-icon {
+	--icon-size: calc(var(--element-spacing-vertical)*2);
+}
+
 .form-label {
 	font-size: .875rem;
 	text-transform: uppercase;
@@ -224,6 +228,67 @@ textarea.form-control--invalid {
 
 .form-helper--error {
 	color: var(--color-error);
+}
+
+.images-input {
+	font-size: .875rem;
+	background-color: var(--color-secondary);
+	border-radius: var(--element-radius);
+	padding: 2rem;
+}
+
+.images-input__control {
+	display: flex;
+	gap: .5rem;
+	flex-direction: column;
+	align-items: center;
+	flex-grow: 1;
+	margin-bottom: 1rem;
+}
+
+.images-input__icon {
+	width: 3rem;
+	height: 3rem;
+}
+
+.images-input__preview-list {
+	display: flex;
+	gap: calc(var(--element-spacing-horizontal)*.4);
+	flex-wrap: wrap;
+	margin-top: var(--element-spacing-vertical);
+}
+
+.images-input__preview-list:empty {
+	display: none;
+}
+
+.images-input__preview-item {
+	height: 4rem;	
+	aspect-ratio: 4/5;
+	position: relative;
+}
+
+.images-input__preview-item-control {
+	background-color: transparent;
+	border: none;
+	padding: 0;
+	line-height: 1;
+	display: absolute;	
+	color: var(--color-error);
+	height: 1.25rem;
+	width: 1.25rem;
+	position: absolute;
+	top: 0;
+	right: 0;
+	transform: translate(30%, -20%);
+}
+
+.images-input__preview-item-image {
+	object-fit: cover;
+	width: 100%;
+	height: 100%;
+	border-radius: calc(var(--element-radius)*.875);
+	overflow: hidden;
 }
 
 .card {
@@ -397,6 +462,8 @@ textarea.form-control--invalid {
 	height: 2.5rem;
 	overflow: hidden;
 	border-radius: 9999px;
+	flex-grow: 0;
+	flex-shrink: 0;
 }
 
 .user-menu__profile a {

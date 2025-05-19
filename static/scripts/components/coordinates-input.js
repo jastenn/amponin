@@ -24,7 +24,7 @@ class CoordinatesInput extends HTMLElement {
 	}
 
 	attributeChangedCallback(name, oldValue, newValue) {
-		if (name == "value") {
+		if (name == "value" && newValue) {
 			const latlng = this.decodeLatLng(newValue)
 			if (!oldValue) {
 				this.map.setView(latlng)

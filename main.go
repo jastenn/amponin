@@ -16,6 +16,8 @@ import (
 const environmentProduction = "production"
 const environmentDevelopment = "development"
 
+const imageStoreBasePath = "image-store"
+
 func main() {
 	const loginSessionMaxAge = time.Hour * 24
 
@@ -64,6 +66,7 @@ func main() {
 	store := &PGStore{
 		DB: databaseConnection,
 	}
+	imageStore := NewLocalImageStore(imageStoreBasePath)
 	mailSender := NewGoogleMailSender(*smtpEmail, *smtpPassword)
 	googleOAuth2Config := &oauth2.Config{
 		ClientID:     *googleAuthClientID,
@@ -140,6 +143,13 @@ func main() {
 		SessionStore:      sessionStore,
 		ShelterGetterByID: store,
 		NotFoundHandler:   notFoundHandler,
+	})
+	mux.Handle("/shelter/{shelter_id}/post", &PostPetHandler{
+		Log:               log,
+		SessionStore:      sessionStore,
+		ShelterRoleGetter: store,
+		PetRegistry:       store,
+		ImageStore:        imageStore,
 	})
 
 	log.Info("Server running.", "address", *address)

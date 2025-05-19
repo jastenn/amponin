@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +26,8 @@ func (s ShelterRole) String() string {
 		return "Admin"
 	case ShelterRoleEditor:
 		return "Editor"
+	case "":
+		return ""
 	default:
 		panic("invalid shelter role")
 	}
@@ -34,6 +38,12 @@ const (
 	ShelterRoleAdmin      ShelterRole = "admin"
 	ShelterRoleEditor     ShelterRole = "editor"
 )
+
+var ErrNoShelterRole = errors.New("no shelter role found.")
+
+type shelterRoleGetter interface {
+	GetShelterRole(ctx context.Context, shelterID, userID string) (ShelterRole, error)
+}
 
 type Shelter struct {
 	ID          string
@@ -361,6 +371,242 @@ func (l *ListManagedShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		renderErrorPage(w, errorPageData{
 			basePageData: basePageData{
 				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+}
+
+type PostPetHandler struct {
+	Log               *slog.Logger
+	SessionStore      *CookieSessionStore
+	ShelterRoleGetter shelterRoleGetter
+	ImageStore        multipartImageStore
+	PetRegistry       petRegistry
+}
+
+type multipartImageStore interface {
+	StoreMultipart([]*multipart.FileHeader) ([]Image, error)
+}
+
+type NewPet struct {
+	Name        string
+	Gender      Gender
+	Type        PetType
+	Images      []Image
+	Description string
+}
+
+type petRegistry interface {
+	RegisterPet(ctx context.Context, shelterID string, data NewPet) (*Pet, error)
+}
+
+type postPetPageData struct {
+	basePageData
+	Flash       *flash
+	FieldValues postPetValues
+	FieldErrors postPetErrors
+}
+
+type postPetValues struct {
+	Name        string
+	Gender      string
+	Type        string
+	Images      []*multipart.FileHeader
+	Description string
+}
+
+type postPetErrors struct {
+	Name        string
+	Gender      string
+	Type        string
+	Images      string
+	Description string
+}
+
+var postPetPage = template.Must(template.ParseFS(embedFS, "templates/pages/shelter/post-pet.html", "templates/pages/base.html"))
+
+func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	p.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+
+	if loginSessionData == nil {
+		p.Log.Debug("Unauthenticated. User is not logged in.")
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized. Please login first.",
+		})
+		return
+	}
+
+	shelterID := r.PathValue("shelter_id")
+	role, err := p.ShelterRoleGetter.GetShelterRole(r.Context(), shelterID, loginSessionData.UserID)
+	if err != nil && !errors.Is(err, ErrNoShelterRole) {
+		p.Log.Error(
+			"Unexpected error while getting shelter role.",
+			"shelter_id", shelterID,
+			"user_id", loginSessionData.UserID,
+		)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+
+	allowedRoles := []ShelterRole{ShelterRoleSuperAdmin, ShelterRoleAdmin, ShelterRoleEditor}
+	if errors.Is(err, ErrNoShelterRole) || !slices.Contains(allowedRoles, role) {
+		p.Log.Debug(
+			"Unauthorized. The current user doesn't have a role for the shelter.",
+			"shelter_id", shelterID,
+			"user_id", loginSessionData.UserID,
+			"role", role,
+		)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized.",
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		err := r.ParseMultipartForm(10_000_000)
+		if err != nil {
+			p.renderPage(w, http.StatusInternalServerError, postPetPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Flash: NewFlash(flashLevelError, clientMessageUnexpectedError),
+			})
+			return
+		}
+
+		fieldValues := postPetValues{
+			Name:        strings.TrimSpace(r.FormValue("name")),
+			Gender:      r.FormValue("gender"),
+			Type:        r.FormValue("type"),
+			Images:      r.MultipartForm.File["images"],
+			Description: strings.TrimSpace(r.FormValue("description")),
+		}
+		fieldErrors, valid := p.validate(fieldValues)
+		if !valid {
+			p.Log.Debug("Field validation failed.", "field_errors", fieldErrors)
+			p.renderPage(w, http.StatusUnprocessableEntity, postPetPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				FieldValues: fieldValues,
+				FieldErrors: fieldErrors,
+			})
+			return
+		}
+
+		images, err := p.ImageStore.StoreMultipart(fieldValues.Images)
+		if err != nil {
+			p.Log.Error("Unable to store images.", "error", err.Error())
+			p.renderPage(w, http.StatusInternalServerError, postPetPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Flash:       NewFlash(flashLevelError, clientMessageUnexpectedError),
+				FieldValues: fieldValues,
+			})
+			return
+		}
+
+		pet, err := p.PetRegistry.RegisterPet(r.Context(), shelterID, NewPet{
+			Name:        fieldValues.Name,
+			Gender:      Gender(fieldValues.Gender),
+			Type:        PetType(fieldValues.Type),
+			Images:      images,
+			Description: fieldValues.Description,
+		})
+		if err != nil {
+			p.Log.Error("Unable to register pet.", "shelter_id", shelterID, "user_id", loginSessionData.UserID, "field_values", fieldValues, "error", err.Error())
+			p.renderPage(w, http.StatusInternalServerError, postPetPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Flash: NewFlash(flashLevelError, clientMessageUnexpectedError),
+			})
+			return
+		}
+
+		p.Log.Info("New pet was registered.", "shelter_id", shelterID, "user_id", loginSessionData.UserID, "pet_id", pet.ID)
+
+		p.renderPage(w, http.StatusOK, postPetPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Flash: NewFlash(flashLevelSuccess, "New pet was posted."),
+		})
+		return
+	}
+
+	p.renderPage(w, http.StatusOK, postPetPageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+	})
+}
+
+func (p *PostPetHandler) validate(fieldValue postPetValues) (fieldErrors postPetErrors, valid bool) {
+	if l := len(fieldValue.Name); l == 0 {
+		fieldErrors.Name = "Please fill out this field."
+	} else if l < 2 {
+		fieldErrors.Name = "Name is too short."
+	} else if l > 20 {
+		fieldErrors.Name = "Name is too long. It must not exceed 20 character long."
+	}
+
+	if fieldValue.Gender == "" {
+		fieldErrors.Gender = "Please fill out this field."
+	} else if fieldValue.Gender != string(GenderMale) && fieldValue.Gender != string(GenderFemale) {
+		fieldErrors.Gender = "Gender is invalid."
+	}
+
+	if fieldValue.Type == "" {
+		fieldErrors.Type = "Please fill out this field."
+	} else if fieldValue.Type != string(PetTypeCat) && fieldValue.Type != string(PetTypeDog) {
+		fieldErrors.Type = "Type is invalid."
+	}
+
+	if l := len(fieldValue.Images); l != 4 {
+		fieldErrors.Images = "Please upload at least 4 images"
+	}
+
+	if l := len(fieldValue.Description); l == 0 {
+		fieldErrors.Description = "Please fill out this field."
+	} else if l < 250 {
+		fieldErrors.Description = "Description is too short. It must be at least 250 characters long."
+	} else if l > 2500 {
+		fieldErrors.Description = "Description is too long. It must not exceed 2,500 characteres long."
+	}
+
+	valid = fieldErrors.Name == "" &&
+		fieldErrors.Gender == "" &&
+		fieldErrors.Type == "" &&
+		fieldErrors.Images == "" &&
+		fieldErrors.Description == ""
+
+	return fieldErrors, valid
+}
+
+func (p *PostPetHandler) renderPage(w http.ResponseWriter, status int, data postPetPageData) {
+	err := RenderPage(w, postPetPage, status, data)
+	if err != nil {
+		p.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: data.LoginSession,
 			},
 			Status:  http.StatusInternalServerError,
 			Message: clientMessageUnexpectedError,

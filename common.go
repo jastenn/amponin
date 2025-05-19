@@ -49,3 +49,12 @@ func renderErrorPage(w http.ResponseWriter, data errorPageData) {
 		panic(err)
 	}
 }
+
+type ImageProvider string
+
+const ImageProviderLocal ImageProvider = "local"
+
+type Image struct {
+	URL      string
+	Provider ImageProvider
+}
