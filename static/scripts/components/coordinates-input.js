@@ -7,7 +7,7 @@ class CoordinatesInput extends HTMLElement {
 		this.internals = this.attachInternals();
 
 		this.innerHTML = `
-			<div data-js-map style="min-height: 10rem; height: auto;"></div>
+			<div data-js-map style="min-height: 10rem; height: 100%;"></div>
 		`
 
 		const el = this.querySelector("[data-js-map]")

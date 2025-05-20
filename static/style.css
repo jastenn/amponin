@@ -294,14 +294,13 @@ textarea.form-control--invalid {
 .card {
 	background-color: var(--color-background-alt);
 	padding: var(--block-spacing-vertical) var(--block-spacing-horizontal);
-	box-shadow: .25rem .25rem 0 0 var(--color-primary);
+	box-shadow: -.28rem .28rem 0 0 var(--color-primary);
 	border: .125rem solid var(--color-primary);
 	border-radius: .75rem;
 	display: flex;
 	flex-direction: column;
 	gap: .5rem;
 	max-width: 35rem;
-	margin-inline: auto;
 }
 
 .card--sm {
@@ -409,7 +408,7 @@ textarea.form-control--invalid {
 	width: 13rem;
 	background-color: white;
 	border: .125rem solid var(--color-primary);
-	box-shadow: .25rem .25rem 0 0 var(--color-primary);
+	box-shadow: -.2rem .2rem 0 0 var(--color-primary);
 	border-radius: var(--element-radius);
 	display: none;
 }

@@ -1,5 +1,14 @@
 {{ define "head" }}
-	<title>Amponin</title>
+	<title>Amponin - Find Your New Companion</title>
+
+	<link rel="stylesheet" href="/static/styles/pages/index.css">
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+		crossorigin=""/>
+	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+		integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+		crossorigin=""></script>
+	<script src="/static/scripts/components/coordinates-input.js" defer></script>
 {{ end }}
 
 {{ define "header-beforeend" }}
@@ -14,5 +23,34 @@
 {{ end }}
 
 {{ define "content" }}
-	<h1>Hello from Amponin.</h1>
+	<main class="container">
+		<div class="hero">
+			<div class="hero__heading-group">
+				<h1 class="hero__heading">Amponin</h1>
+				<p>Discover your perfect match. Adopt your companion forever.</p>	
+			</div>			
+			<form action="/pets" method="get" class="card hero__action">
+				<div>
+					<label for="coordinates">Coordinates</label>		
+					<coordinates-input id="coordinates" class="form-control" name="location"
+						style="height: 15rem;"
+					></coordinates-input>	
+				</div>
+				<div>
+					<label for="type">Type</label>			
+					<select name="type" class="form-control">
+						<option value="any">Any</option>
+						<option value="cat">Cat</option>
+						<option value="dog">Dog</option>
+					</select>	
+				</div>
+					<button type="submit" class="button button--with-icon">
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="button__icon">
+							<path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd" />
+						</svg>
+						<span>Search</span>
+					</button>
+			</form>
+		</div>
+	</main>
 {{ end }}

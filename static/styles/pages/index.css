@@ -1,0 +1,26 @@
+.hero {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 2rem;
+}
+
+.hero__heading-group {
+	font-size: 1.5rem;
+	flex-grow: 999;	
+	max-width: 34ch;
+}
+
+.hero__heading-group * {
+	margin: 0;
+}
+
+.hero__heading {
+	font-size: 3rem;
+	margin-bottom: .25em;
+}
+
+.hero__action {
+	flex-grow: 0;
+	width: 28rem;
+}
