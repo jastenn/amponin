@@ -45,7 +45,16 @@
 				<option value="cat" {{ if eq .FieldValues.Gender `cat` }} selected {{ end }}>Cat</option>	
 				<option value="dog" {{ if eq .FieldValues.Gender `dog` }} selected {{ end }}>Dog</option>	
 			</select>
-			{{ with .FieldErrors.Gender }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+			{{ with .FieldErrors.Type }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+		<div>
+			<label for="type" class="form-label">Birth Date</label>
+			<input type="date" name="birth-date" value="{{ .FieldValues.BirthDate }}" class="form-control {{ with .FieldErrors.BirthDate -}} form-control--invalid {{- end }} "
+				{{ with .FieldErrors.BirthDate }} aria-invalid="true" {{ end }}
+			>
+			<input id="is-birth-date-approx" type="checkbox" name="is-birth-date-approx">
+			<label for="is-birth-date-approx">Is Birth Date Approx</label>
+			{{ with .FieldErrors.BirthDate }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
 		</div>
 		
 		<div>

@@ -392,11 +392,13 @@ type multipartImageStore interface {
 }
 
 type NewPet struct {
-	Name        string
-	Gender      Gender
-	Type        PetType
-	Images      []Image
-	Description string
+	Name              string
+	Gender            Gender
+	Type              PetType
+	BirthDate         time.Time
+	IsBirthDateApprox bool
+	Images            []Image
+	Description       string
 }
 
 type petRegistry interface {
@@ -411,17 +413,20 @@ type postPetPageData struct {
 }
 
 type postPetValues struct {
-	Name        string
-	Gender      string
-	Type        string
-	Images      []*multipart.FileHeader
-	Description string
+	Name              string
+	Gender            string
+	Type              string
+	BirthDate         string
+	IsBirthDateApprox bool
+	Images            []*multipart.FileHeader
+	Description       string
 }
 
 type postPetErrors struct {
 	Name        string
 	Gender      string
 	Type        string
+	BirthDate   string
 	Images      string
 	Description string
 }
@@ -490,11 +495,13 @@ func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fieldValues := postPetValues{
-			Name:        strings.TrimSpace(r.FormValue("name")),
-			Gender:      r.FormValue("gender"),
-			Type:        r.FormValue("type"),
-			Images:      r.MultipartForm.File["images"],
-			Description: strings.TrimSpace(r.FormValue("description")),
+			Name:              strings.TrimSpace(r.FormValue("name")),
+			Gender:            r.FormValue("gender"),
+			Type:              r.FormValue("type"),
+			BirthDate:         r.FormValue("birth-date"),
+			IsBirthDateApprox: r.FormValue("is-birth-date-approx") == "on",
+			Images:            r.MultipartForm.File["images"],
+			Description:       strings.TrimSpace(r.FormValue("description")),
 		}
 		fieldErrors, valid := p.validate(fieldValues)
 		if !valid {
@@ -522,10 +529,13 @@ func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		birthDate, _ := http.ParseTime(fieldValues.BirthDate)
+
 		pet, err := p.PetRegistry.RegisterPet(r.Context(), shelterID, NewPet{
 			Name:        fieldValues.Name,
 			Gender:      Gender(fieldValues.Gender),
 			Type:        PetType(fieldValues.Type),
+			BirthDate:   birthDate,
 			Images:      images,
 			Description: fieldValues.Description,
 		})
@@ -581,6 +591,12 @@ func (p *PostPetHandler) validate(fieldValue postPetValues) (fieldErrors postPet
 
 	if l := len(fieldValue.Images); l != 4 {
 		fieldErrors.Images = "Please upload at least 4 images"
+	}
+
+	if fieldValue.BirthDate == "" {
+		fieldErrors.BirthDate = "Please fill out this field."
+	} else if parsedBirthDate, err := http.ParseTime(fieldValue.BirthDate); err != nil || parsedBirthDate.After(time.Now()) {
+		fieldErrors.BirthDate = "Date is invalid"
 	}
 
 	if l := len(fieldValue.Description); l == 0 {

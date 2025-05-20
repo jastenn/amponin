@@ -87,6 +87,7 @@ func main() {
 
 	// embedFS contains a static directory which hosts all the static files
 	// needed to be served.
+	mux.Handle("GET /image-store/", http.StripPrefix("/image-store/", http.FileServer(http.Dir("image-store"))))
 	mux.Handle("GET /static/", http.FileServerFS(embedFS))
 	mux.Handle("/", &IndexHandler{
 		Log:             log,
@@ -150,6 +151,12 @@ func main() {
 		ShelterRoleGetter: store,
 		PetRegistry:       store,
 		ImageStore:        imageStore,
+	})
+	mux.Handle("/pet/{pet_id}", &PetByIDHandler{
+		Log:             log,
+		SessionStore:    sessionStore,
+		PetGetter:       store,
+		NotFoundHandler: notFoundHandler,
 	})
 
 	log.Info("Server running.", "address", *address)

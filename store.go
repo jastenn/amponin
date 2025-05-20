@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/lib/pq"
 )
@@ -329,62 +328,76 @@ func (p *PGStore) GetShelterRole(ctx context.Context, shelterID, userID string) 
 }
 
 func (p *PGStore) RegisterPet(ctx context.Context, shelterID string, data NewPet) (*Pet, error) {
-	images := ConvertImagesToPGImages(data.Images)
-
 	row := p.DB.QueryRowContext(
 		ctx,
 		`INSERT INTO pets (
-			name, gender, type, images,
-			description	
+			shelter_id, name, gender, type,
+			birth_date, is_birth_date_approx, images, description
 		) VALUES (
 			$1, $2, $3, $4,
-			$5
+			$5, $6, $7, $8
 		) RETURNING 
 			pet_id, name, gender, type,
-			images, description, registered_at, updated_at`,
-		data.Name, data.Gender, data.Type, pq.Array(images),
-		data.Description,
+			birth_date, is_birth_date_approx, images, description,
+			registered_at, updated_at`,
+		shelterID, data.Name, data.Gender, data.Type,
+		data.BirthDate, data.IsBirthDateApprox, pq.Array(data.Images), data.Description,
 	)
-	var result struct {
-		ID           string
-		Name         string
-		Gender       string
-		Type         string
-		Images       []pgImage
-		Description  string
-		RegisteredAt time.Time
-		UpdatedAt    time.Time
-	}
+
+	pet := &Pet{}
 	err := row.Scan(
-		&result.ID, &result.Name, &result.Gender, &result.Type,
-		pq.Array(&result.Images), &result.Description, &result.RegisteredAt, &result.UpdatedAt,
+		&pet.ID, &pet.Name, &pet.Gender, &pet.Type,
+		&pet.BirthDate, &pet.IsBirthDateApprox, pq.Array(&pet.Images), &pet.Description,
+		&pet.RegisteredAt, &pet.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to insert into pets table: %w", err)
 	}
 
-	return &Pet{
-		ID:           result.ID,
-		Name:         result.Name,
-		Gender:       Gender(result.Gender),
-		Type:         PetType(result.Type),
-		Images:       ConvertPGImagesToImages(result.Images),
-		Description:  result.Description,
-		RegisteredAt: result.RegisteredAt,
-		UpdatedAt:    result.UpdatedAt,
-	}, nil
+	return pet, nil
 }
 
-type pgImage struct {
-	Provider ImageProvider
-	URL      string
+func (p *PGStore) GetPetByID(ctx context.Context, id string) (*Pet, *Shelter, error) {
+	row := p.DB.QueryRowContext(ctx,
+		`SELECT 
+			pet_id, p.name, gender, type,
+			birth_date, is_birth_date_approx, images, p.description,
+			registered_at, p.updated_at,
+			s.shelter_id, s.name, avatar_url, address, 
+			ST_Y(coordinates), ST_X(coordinates), s.description, s.created_at,
+			s.updated_at
+		 FROM pets p
+		 JOIN shelters s USING(shelter_id)
+		 WHERE pet_id = $1`,
+		id,
+	)
+
+	pet := &Pet{}
+	shelter := &Shelter{}
+	err := row.Scan(
+		&pet.ID, &pet.Name, &pet.Gender, &pet.Type,
+		&pet.BirthDate, &pet.IsBirthDateApprox, pq.Array(&pet.Images), &pet.Description,
+		&pet.RegisteredAt, &pet.UpdatedAt,
+		&shelter.ID, &shelter.Name, &shelter.AvatarURL, &shelter.Address,
+		&shelter.Coordinates.Latitude, &shelter.Coordinates.Longtude, &shelter.Description, &shelter.CreatedAt,
+		&shelter.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, ErrNoPet
+		}
+
+		return nil, nil, fmt.Errorf("unable to query pets table: %w", err)
+	}
+
+	return pet, shelter, nil
 }
 
-func (p pgImage) Value() (driver.Value, error) {
-	return fmt.Sprintf("(%s,%s)", p.Provider, p.URL), nil
+func (i Image) Value() (driver.Value, error) {
+	return fmt.Sprintf("(%s,%s)", i.Provider, i.URL), nil
 }
 
-func (p *pgImage) Scan(src any) error {
+func (i *Image) Scan(src any) error {
 	s := string(src.([]byte))
 	s = s[1 : len(s)-1]
 	results := strings.Split(s, ",")
@@ -392,32 +405,8 @@ func (p *pgImage) Scan(src any) error {
 		return fmt.Errorf("invalid scan function: expects 2 values, received %v", l)
 	}
 
-	p.Provider = ImageProvider(results[0])
-	p.URL = results[1]
+	i.Provider = ImageProvider(results[0])
+	i.URL = results[1]
 
 	return nil
-}
-
-func ConvertPGImagesToImages(pgImages []pgImage) []Image {
-	var result []Image
-	for _, pgImage := range pgImages {
-		result = append(result, Image{
-			Provider: pgImage.Provider,
-			URL:      pgImage.URL,
-		})
-	}
-
-	return result
-}
-
-func ConvertImagesToPGImages(images []Image) []pgImage {
-	var result []pgImage
-	for _, image := range images {
-		result = append(result, pgImage{
-			Provider: image.Provider,
-			URL:      image.URL,
-		})
-	}
-
-	return result
 }

@@ -6,7 +6,6 @@ import (
 	"mime/multipart"
 	"os"
 	"path"
-	"path/filepath"
 
 	"github.com/google/uuid"
 )
@@ -29,14 +28,14 @@ func NewLocalImageStore(basePath string) *LocalImageStore {
 func (l *LocalImageStore) StoreMultipart(files []*multipart.FileHeader) ([]Image, error) {
 	var result []Image
 	for _, file := range files {
-		relativeFilepath := path.Join(l.BasePath, uuid.New().String())
+		filepath := path.Join(l.BasePath, uuid.New().String())
 
 		inputFile, err := file.Open()
 		if err != nil {
 			return nil, fmt.Errorf("unable to open file: %w", err)
 		}
 
-		outFile, err := os.Create(relativeFilepath)
+		outFile, err := os.Create(filepath)
 		if err != nil {
 			return nil, fmt.Errorf("unable to create file: %w", err)
 		}
@@ -45,14 +44,9 @@ func (l *LocalImageStore) StoreMultipart(files []*multipart.FileHeader) ([]Image
 			return nil, fmt.Errorf("unable to write file: %w", err)
 		}
 
-		absoluteFilepath, err := filepath.Abs(relativeFilepath)
-		if err != nil {
-			return nil, fmt.Errorf("unable to process filepath: %w", err)
-		}
-
 		result = append(result, Image{
 			Provider: ImageProviderLocal,
-			URL:      absoluteFilepath,
+			URL:      "/" + filepath,
 		})
 	}
 
