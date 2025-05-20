@@ -426,7 +426,7 @@ type postPetErrors struct {
 	Description string
 }
 
-var postPetPage = template.Must(template.ParseFS(embedFS, "templates/pages/shelter/post-pet.html", "templates/pages/base.html"))
+var postPetPage = template.Must(template.ParseFS(embedFS, "templates/pages/shelter/post_pet.html", "templates/pages/base.html"))
 
 func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var loginSessionData *loginSession
