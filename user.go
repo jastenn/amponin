@@ -144,7 +144,7 @@ func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		referer := r.Referer()
 		if referer == "" {
-			flash := NewFlash(flashLevelError, message)
+			flash := newFlash(flashLevelError, message)
 			s.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
 			http.Redirect(w, r, referer, http.StatusSeeOther)
 		}
@@ -220,7 +220,7 @@ func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 
-		flash := NewFlash(flashLevelSuccess, "Verification code sent.")
+		flash := newFlash(flashLevelSuccess, "Verification code sent.")
 		s.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
 
 		http.Redirect(w, r, s.VerificationRedirectURL, http.StatusSeeOther)
@@ -316,7 +316,7 @@ func (s *SignupVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		err := s.SessionStore.Decode(r, sessionKeySignupVerification, &signupVerification)
 		if err != nil {
 			s.Log.Error("Unable to decode signup verification from session.", "error", err.Error())
-			flash := NewFlash(flashLevelError, "Please start the signup process.")
+			flash := newFlash(flashLevelError, "Please start the signup process.")
 			s.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
 			http.Redirect(w, r, s.SignupURL, http.StatusSeeOther)
 			return
@@ -334,7 +334,7 @@ func (s *SignupVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		if err != nil {
 			s.Log.Error("Unable to generate hash from password.", "error", err.Error())
 			s.renderPage(w, http.StatusOK, signupVerificationPageData{
-				Flash:            NewFlash(flashLevelError, clientMessageUnexpectedError),
+				Flash:            newFlash(flashLevelError, clientMessageUnexpectedError),
 				VerificationCode: verificationCode,
 			})
 			return
@@ -350,7 +350,7 @@ func (s *SignupVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		if err != nil {
 			if errors.Is(err, ErrUserEmailInUse) {
 				s.Log.Info("Email is already in use.", "email", signupVerification.Values.Email)
-				flash := NewFlash(flashLevelError, "Email is already in use.")
+				flash := newFlash(flashLevelError, "Email is already in use.")
 				s.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
 				http.Redirect(w, r, s.SignupURL, http.StatusSeeOther)
 				return
@@ -359,14 +359,14 @@ func (s *SignupVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 			s.Log.Error("Unable to create local account.", "error", err.Error())
 
 			s.renderPage(w, http.StatusOK, signupVerificationPageData{
-				Flash:            NewFlash(flashLevelError, clientMessageUnexpectedError),
+				Flash:            newFlash(flashLevelError, clientMessageUnexpectedError),
 				VerificationCode: verificationCode,
 			})
 			return
 		}
 
 		s.Log.Info("Successfully created a local account.", "user_id", user.ID, "local_account_id", localAccount.ID)
-		flash := NewFlash(flashLevelSuccess, "Successfully created an account.")
+		flash := newFlash(flashLevelSuccess, "Successfully created an account.")
 		s.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
 		http.Redirect(w, r, s.SignupURL, http.StatusSeeOther)
 		return
@@ -426,7 +426,7 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if loginSessionData != nil {
 		l.Log.Debug("User is already logged in.", "user_id", loginSessionData.UserID)
-		flash := NewFlash(flashLevelSuccess, "You are already logged in.")
+		flash := newFlash(flashLevelSuccess, "You are already logged in.")
 		l.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
 		http.Redirect(w, r, l.SuccessRedirect, http.StatusSeeOther)
 		return
@@ -453,21 +453,21 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case errors.Is(err, ErrNoUser):
 				l.Log.Debug("User doesn't exists", "user_email", fieldValues.Email)
 				l.renderPage(w, r, http.StatusUnprocessableEntity, loginPageData{
-					Flash:       NewFlash(flashLevelError, "Incorrect email or password."),
+					Flash:       newFlash(flashLevelError, "Incorrect email or password."),
 					FieldValues: fieldValues,
 				})
 				return
 			case errors.Is(err, ErrNoAccount):
 				l.Log.Debug("Account doesn't exists.", "user_email", fieldValues.Email)
 				l.renderPage(w, r, http.StatusUnprocessableEntity, loginPageData{
-					Flash:       NewFlash(flashLevelError, "Incorrect email or password."),
+					Flash:       newFlash(flashLevelError, "Incorrect email or password."),
 					FieldValues: fieldValues,
 				})
 				return
 			default:
 				l.Log.Error("Unexpected error while getting local account.", "error", err.Error())
 				l.renderPage(w, r, http.StatusInternalServerError, loginPageData{
-					Flash:       NewFlash(flashLevelError, clientMessageUnexpectedError),
+					Flash:       newFlash(flashLevelError, clientMessageUnexpectedError),
 					FieldValues: fieldValues,
 				})
 				return
@@ -478,7 +478,7 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			l.Log.Debug("Password comparison failed.", "error", err.Error())
 			l.renderPage(w, r, http.StatusUnprocessableEntity, loginPageData{
-				Flash:       NewFlash(flashLevelError, "Incorrect email or password."),
+				Flash:       newFlash(flashLevelError, "Incorrect email or password."),
 				FieldValues: fieldValues,
 			})
 			return
@@ -494,13 +494,13 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			l.Log.Error("Unable to create new login session.", "user_id", loginSessionData.UserID, "error", err.Error())
 			l.renderPage(w, r, http.StatusInternalServerError, loginPageData{
-				Flash:       NewFlash(flashLevelError, clientMessageUnexpectedError),
+				Flash:       newFlash(flashLevelError, clientMessageUnexpectedError),
 				FieldValues: fieldValues,
 			})
 			return
 		}
 
-		flash := NewFlash(flashLevelSuccess, "Successfully logged in.")
+		flash := newFlash(flashLevelSuccess, "Successfully logged in.")
 		l.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
 		http.Redirect(w, r, l.SuccessRedirect, http.StatusSeeOther)
 		return
@@ -655,7 +655,7 @@ func (g *GoogleAuthRedirectHandler) Error(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	flash := NewFlash(flashLevelError, message)
+	flash := newFlash(flashLevelError, message)
 	g.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }

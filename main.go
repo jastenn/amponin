@@ -158,6 +158,11 @@ func main() {
 		PetGetter:       store,
 		NotFoundHandler: notFoundHandler,
 	})
+	mux.Handle("/pets", &FindPetHandler{
+		Log:          log,
+		SessionStore: sessionStore,
+		PetFinder:    store,
+	})
 
 	log.Info("Server running.", "address", *address)
 	err = http.ListenAndServe(*address, mux)

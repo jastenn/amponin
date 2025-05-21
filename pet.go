@@ -105,6 +105,123 @@ func (p *PetByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type FindPetHandler struct {
+	Log          *slog.Logger
+	SessionStore *CookieSessionStore
+	PetFinder    PetFinder
+}
+
+type FindQueryResult struct {
+	Pet      *Pet
+	Distance int
+	Address  string
+}
+
+type RawFindQueryFilter struct {
+	Location string
+	Type     string
+}
+
+type FindQueryFilter struct {
+	Location    Coordinates
+	Type        *PetType
+	MaxDistance *int
+}
+
+type PetFinder interface {
+	FindPet(context.Context, FindQueryFilter) ([]*FindQueryResult, error)
+}
+
+type findPetPageData struct {
+	basePageData
+	FormError string
+	Flash     *flash
+	Filter    RawFindQueryFilter
+	Result    []*FindQueryResult
+}
+
+var findPetPage = template.Must(template.New("find pets").
+	Funcs(template.FuncMap{
+		"fmt_distance": fmtDistance,
+	}).
+	ParseFS(embedFS, "templates/pages/pet/find.html", "templates/pages/base.html"))
+
+func (f *FindPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	f.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+
+	rawFilter := RawFindQueryFilter{
+		Location: r.FormValue("location"),
+		Type:     r.FormValue("type"),
+	}
+
+	location, err := ParseCoordinates(rawFilter.Location)
+	if err != nil {
+		f.Log.Error("Unable to parse coordinates.", "error", err.Error())
+		message := "Invalid coordinates."
+		if r.FormValue("location") == "" {
+			message = "Coordinates is required."
+		}
+		f.renderPage(w, http.StatusUnprocessableEntity, findPetPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Filter:    rawFilter,
+			FormError: message,
+			Result:    nil,
+		})
+		return
+	}
+
+	var petType PetType
+	if parsed := PetType(rawFilter.Type); parsed == PetTypeCat || parsed == PetTypeDog {
+		petType = parsed
+	}
+
+	pets, err := f.PetFinder.FindPet(r.Context(), FindQueryFilter{
+		Location: *location,
+		Type:     &petType,
+	})
+	if err != nil {
+		f.Log.Error("Unable to find pets.", "error", err.Error())
+		f.renderPage(w, http.StatusInternalServerError, findPetPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Flash:  newFlash(flashLevelError, clientMessageUnexpectedError),
+			Filter: rawFilter,
+		})
+		return
+	}
+
+	f.renderPage(w, http.StatusOK, findPetPageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		Result: pets,
+		Filter: rawFilter,
+	})
+}
+
+func (f *FindPetHandler) renderPage(w http.ResponseWriter, status int, data findPetPageData) {
+	err := RenderPage(w, findPetPage, status, data)
+	if err != nil {
+		f.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: data.basePageData,
+			Status:       http.StatusInternalServerError,
+			Message:      clientMessageUnexpectedError,
+		})
+		return
+	}
+}
+
+func fmtDistance(meters int) string {
+	kilometer := float64(meters) / 1000
+
+	return fmt.Sprintf("%.2f KM", kilometer)
+}
+
 func calculateAge(t time.Time) string {
 	const year = time.Hour * 24 * 365
 	const month = time.Hour * 24 * 30

@@ -393,6 +393,63 @@ func (p *PGStore) GetPetByID(ctx context.Context, id string) (*Pet, *Shelter, er
 	return pet, shelter, nil
 }
 
+func (p *PGStore) FindPet(ctx context.Context, filter FindQueryFilter) ([]*FindQueryResult, error) {
+	if filter.MaxDistance == nil {
+		maxDistance := 15_000
+		filter.MaxDistance = &maxDistance
+	}
+	if filter.Type != nil && *filter.Type != PetTypeDog && *filter.Type != PetTypeCat {
+		filter.Type = nil
+	}
+
+	row, err := p.DB.QueryContext(ctx,
+		`SELECT
+			p.pet_id, p.name, p.gender, p.type,
+			p.birth_date, p.is_birth_date_approx, p.images, p.description,
+			p.registered_at, p.updated_at,
+			s.address, Round(ST_Distance(s.coordinates, ST_SetSRID(ST_MakePoint($1, $2), 4326)))
+		 FROM pets p
+		 JOIN shelters s USING(shelter_id)
+		 WHERE
+			ST_Distance(s.coordinates, ST_SetSRID(ST_MakePoint($1, $2), 4326)) <= $3 AND
+			$4::PET_TYPE IS NULL OR type = $4::PET_TYPE`,
+		filter.Location.Latitude, filter.Location.Longtude, filter.MaxDistance, filter.Type,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to query pet by location: %w", err)
+	}
+	defer row.Close()
+
+	var results []*FindQueryResult
+	for row.Next() {
+		pet := &Pet{}
+		var distance int
+		var address string
+		err := row.Scan(
+			&pet.ID, &pet.Name, &pet.Gender, &pet.Type,
+			&pet.BirthDate, &pet.IsBirthDateApprox, pq.Array(&pet.Images), &pet.Description,
+			&pet.RegisteredAt, &pet.UpdatedAt,
+			&address, &distance,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("unable to scan pet by location query result: %w", err)
+		}
+
+		results = append(results, &FindQueryResult{
+			Pet:      pet,
+			Distance: distance,
+			Address:  address,
+		})
+	}
+
+	err = row.Err()
+	if err != nil {
+		return nil, fmt.Errorf("something went wrong while looping through pet by location query result: %w", err)
+	}
+
+	return results, nil
+}
+
 func (i Image) Value() (driver.Value, error) {
 	return fmt.Sprintf("(%s,%s)", i.Provider, i.URL), nil
 }

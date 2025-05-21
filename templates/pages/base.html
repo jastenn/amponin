@@ -28,7 +28,10 @@
 						<div id="user-menu-items" class="user-menu__items">
 							<div class="user-menu__item user-menu__profile">
 								<img src="{{ with .AvatarURL -}} {{ . }} {{- else -}} /static/default-user-avatar.png {{- end }}" alt="" class="user-menu__profile-avatar">
-								<p class="user-menu__profile-name" title="{{ .Name }}">{{ .Name }}</p>
+								<div>
+									<p class="user-menu__profile-name" title="{{ .Name }}">{{ .Name }}</p>
+									<a href="/user/settings">Edit Info</a>	
+								</div>
 							</div>
 							<hr>
 							<a href="/shelter" class="user-menu__item user-menu__item--with-icon">

@@ -1,0 +1,86 @@
+{{ define "head" }}
+	<title>Pets - Amponin</title>
+
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+		crossorigin=""/>
+	<link rel="stylesheet" href="/static/styles/pages/pet/find.css">
+	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+		integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+		crossorigin=""></script>
+	<script src="/static/scripts/components/coordinates-input.js" defer></script>
+{{ end }}
+
+{{ define "header-beforeend" }}
+	{{ with .Flash }}
+		<div class="notification-bar {{ if eq .Level `success` -}} notification-bar--success
+			{{ else if eq .Level `warn` }} notification-bar--warn
+			{{ else if eq .Level `error` }} notification-bar--error {{ end }}"
+		>
+			{{ .Message }}	
+		</div>
+	{{ end }}
+{{ end }}
+
+{{ define "content" }}
+	<main class="container">
+		<form action="/pets" method="get" class="card pet-search">
+			<coordinates-input
+				class="form-control"
+				name="location"
+				style="height: 15rem;"
+				value="{{ .Filter.Location }}"
+			></coordinates-input>	
+			{{ with .FormError }}
+				<div class="form-helper form-helper--error">
+					{{ . }}
+				</div>
+			{{ end }}
+			<div class="pet-search__group-control">
+				<select name="type" class="form-control">
+					<option value="any" {{ if eq .Filter.Type `any` }} selected {{ end }}>Any</option>
+					<option value="cat" {{ if eq .Filter.Type `cat` }} selected {{ end }}>Cat</option>
+					<option value="dog" {{ if eq .Filter.Type `dog` }} selected {{ end }}>Dog</option>
+				</select>	
+				<button type="submit" class="button button--with-icon">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="button__icon">
+						<path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd" />
+					</svg>
+					<span>Search</span>
+				</button>
+			</div>
+		</form>
+
+		<div class="pet-result-list">
+			{{ range .Result }}
+			<div class="pet-result card">
+				<img class="pet-result__image" src="{{ (index .Pet.Images 0).URL }}" alt="">
+				<div>
+					<p class="pet-result__distance">{{ fmt_distance .Distance }} AWAY</p>
+					<div class="pet-result__hgroup">
+						{{ if eq .Pet.Gender `female` }}
+							<div class="pet-result__gender pet-result__gender--female">
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512">
+									<path d="M80 176a112 112 0 1 1 224 0A112 112 0 1 1 80 176zM224 349.1c81.9-15 144-86.8 144-173.1C368 78.8 289.2 0 192 0S16 78.8 16 176c0 86.3 62.1 158.1 144 173.1l0 34.9-32 0c-17.7 0-32 14.3-32 32s14.3 32 32 32l32 0 0 32c0 17.7 14.3 32 32 32s32-14.3 32-32l0-32 32 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-32 0 0-34.9z" fill="currentColor"/>
+								</svg>
+								<span class="sr-only">Female</span>
+							</div>
+						{{ else if eq .Pet.Gender `male` }}
+							<div class="pet-result__gender pet-result__gender--male">
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512">
+									<path d="M289.8 46.8c3.7-9 12.5-14.8 22.2-14.8l112 0c13.3 0 24 10.7 24 24l0 112c0 9.7-5.8 18.5-14.8 22.2s-19.3 1.7-26.2-5.2l-33.4-33.4L321 204.2c19.5 28.4 31 62.7 31 99.8c0 97.2-78.8 176-176 176S0 401.2 0 304s78.8-176 176-176c37 0 71.4 11.4 99.8 31l52.6-52.6L295 73c-6.9-6.9-8.9-17.2-5.2-26.2zM400 80s0 0 0 0s0 0 0 0s0 0 0 0zM176 416a112 112 0 1 0 0-224 112 112 0 1 0 0 224z" fill="currentColor"/>
+								</svg>
+								<span class="sr-only">Male</span>
+							</div>
+						{{ end }}
+						<a href="/pet/{{ .Pet.ID }}" class="pet-result__heading">{{ .Pet.Name }}</a>
+					</div>
+					<p class="pet-result__address">{{ .Address }}</p>
+				</div>
+			</div>
+			{{ else }}
+				<p>No pet was found.</p>
+			{{ end }}
+		</div>
+	</main>
+{{ end }}

@@ -172,7 +172,7 @@ func (rh *RegisterShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 				basePageData: basePageData{
 					LoginSession: loginSessionData,
 				},
-				Flash:       NewFlash(flashLevelError, clientMessageUnexpectedError),
+				Flash:       newFlash(flashLevelError, clientMessageUnexpectedError),
 				FieldValues: fieldValues,
 			})
 			return
@@ -183,7 +183,7 @@ func (rh *RegisterShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			basePageData: basePageData{
 				LoginSession: loginSessionData,
 			},
-			Flash: NewFlash(flashLevelSuccess, "Successfully registered a new shelter."),
+			Flash: newFlash(flashLevelSuccess, "Successfully registered a new shelter."),
 		})
 		return
 	}
@@ -489,7 +489,7 @@ func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				basePageData: basePageData{
 					LoginSession: loginSessionData,
 				},
-				Flash: NewFlash(flashLevelError, clientMessageUnexpectedError),
+				Flash: newFlash(flashLevelError, clientMessageUnexpectedError),
 			})
 			return
 		}
@@ -523,7 +523,7 @@ func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				basePageData: basePageData{
 					LoginSession: loginSessionData,
 				},
-				Flash:       NewFlash(flashLevelError, clientMessageUnexpectedError),
+				Flash:       newFlash(flashLevelError, clientMessageUnexpectedError),
 				FieldValues: fieldValues,
 			})
 			return
@@ -545,7 +545,7 @@ func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				basePageData: basePageData{
 					LoginSession: loginSessionData,
 				},
-				Flash: NewFlash(flashLevelError, clientMessageUnexpectedError),
+				Flash: newFlash(flashLevelError, clientMessageUnexpectedError),
 			})
 			return
 		}
@@ -556,7 +556,7 @@ func (p *PostPetHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			basePageData: basePageData{
 				LoginSession: loginSessionData,
 			},
-			Flash: NewFlash(flashLevelSuccess, "New pet was posted."),
+			Flash: newFlash(flashLevelSuccess, "New pet was posted."),
 		})
 		return
 	}
