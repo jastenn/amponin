@@ -11,21 +11,25 @@
 			<div class="account-settings__profile-name"> {{ .LoginSession.Name }} </div>
 			<a href="#" class="account-settings__action">Edit Info</a>
 		</div>
-		{{ if .IsLocalAccount }}
 			<div class="account-settings__field">
 				<div class="account-settings__field-heading">
 					<h2 class="account-settings__field-heading-text">Email</h2>
-					<a href="#" class="account-settings__field-heading-action account-settings__action">Change Email</a>
+					{{ if .IsLocalAccount }} <a href="#" class="account-settings__field-heading-action account-settings__action">Change Email</a> {{ end }}
 				</div>
 				<p class="account-settings__field-value">{{ redact_email .LoginSession.Email }}</p>
 			</div>
 			<div class="account-settings__field">
 				<div class="account-settings__field-heading">
 					<h2 class="account-settings__field-heading-text">Password</h2>
-					<a href="#" class="account-settings__field-heading-action account-settings__action">Change Password</a>
+					{{ if .IsLocalAccount }} 
+						<a href="#" class="account-settings__field-heading-action account-settings__action">Change Password</a>
+					{{ end }}
 				</div>
-				<p class="account-settings__field-value">********</p>
+				{{ if .IsLocalAccount }} 
+					<p class="account-settings__field-value">********</p>
+				{{ else }}	
+					<p class="account-settings__field-flash">You signed up with a foreign provider.</p>
+				{{ end }}
 			</div>
-		{{ end }}	
 	</div>
 {{ end }}

@@ -32,6 +32,7 @@
 	display: flex;
 	align-items: baseline;
 	justify-content: space-between;
+	margin-bottom: .35em;
 }
 
 .account-settings__field-heading-text {
@@ -41,4 +42,12 @@
 
 .account-settings__field-value {
 	margin: 0;
+}
+
+.account-settings__field-flash {
+	margin: 0;
+	padding: var(--element-spacing-vertical) var(--element-spacing-horizontal);
+	background-color: var(--color-warn-muted);
+	color: var(--color-warn);
+	border-radius: var(--element-radius);
 }
