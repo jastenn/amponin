@@ -49,7 +49,7 @@ type Shelter struct {
 	ID          string
 	Name        string
 	Address     string
-	AvatarURL   *string
+	Avatar      *Image
 	Coordinates Coordinates
 	Description string
 	CreatedAt   time.Time

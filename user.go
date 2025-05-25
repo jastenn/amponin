@@ -692,14 +692,14 @@ type AccountHandler struct {
 	LocalAccountGetter localAccountGetter
 }
 
-type accountSettingsPageData struct {
+type accountPageData struct {
 	basePageData
 	Flash          *flash
 	IsLocalAccount bool
 }
 
-var accountSettingsPage = template.Must(
-	template.New("account_settings.html").
+var accountPage = template.Must(
+	template.New("account.html").
 		Funcs(template.FuncMap{
 			"redact_email": redactEmail,
 		}).
@@ -737,9 +737,9 @@ func (a *AccountHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var flashData *flash
-	a.SessionStore.Decode(r, sessionKeyFlash, &flashData)
+	a.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flashData)
 
-	err = RenderPage(w, accountSettingsPage, http.StatusOK, accountSettingsPageData{
+	err = RenderPage(w, accountPage, http.StatusOK, accountPageData{
 		basePageData: basePageData{
 			LoginSession: loginSessionData,
 		},

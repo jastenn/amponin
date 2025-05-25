@@ -1,7 +1,7 @@
 create table if not exists shelters (
     shelter_id text primary key default nanoid(8),
     name text not null,
-    avatar_url text, 
+    avatar image, 
     address text not null,
     coordinates geometry not null,
     description text not null,

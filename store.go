@@ -276,7 +276,7 @@ func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelte
 
 	result := &Shelter{}
 	err := row.Scan(
-		&result.ID, &result.Name, &result.AvatarURL, &result.Address,
+		&result.ID, &result.Name, &result.Avatar, &result.Address,
 		&result.Coordinates.Latitude, &result.Coordinates.Longtude, &result.Description,
 		&result.CreatedAt, &result.UpdatedAt,
 	)
@@ -312,7 +312,7 @@ func (p *PGStore) FindManagedShelter(ctx context.Context, userID string) ([]*Man
 		shelter := &Shelter{}
 		var role string
 		err := rows.Scan(
-			&shelter.ID, &shelter.Name, &shelter.AvatarURL, &shelter.Address,
+			&shelter.ID, &shelter.Name, &shelter.Avatar, &shelter.Address,
 			&shelter.Coordinates.Latitude, &shelter.Coordinates.Longtude, &shelter.Description, &shelter.CreatedAt,
 			&shelter.UpdatedAt, &role,
 		)
@@ -405,7 +405,7 @@ func (p *PGStore) GetPetByID(ctx context.Context, id string) (*Pet, *Shelter, er
 		&pet.ID, &pet.Name, &pet.Gender, &pet.Type,
 		&pet.BirthDate, &pet.IsBirthDateApprox, pq.Array(&pet.Images), &pet.Description,
 		&pet.RegisteredAt, &pet.UpdatedAt,
-		&shelter.ID, &shelter.Name, &shelter.AvatarURL, &shelter.Address,
+		&shelter.ID, &shelter.Name, &shelter.Avatar, &shelter.Address,
 		&shelter.Coordinates.Latitude, &shelter.Coordinates.Longtude, &shelter.Description, &shelter.CreatedAt,
 		&shelter.UpdatedAt,
 	)

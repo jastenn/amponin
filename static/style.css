@@ -397,7 +397,7 @@ textarea.form-control--invalid {
 	border-radius: 99999px;
 	overflow: hidden;
 	padding: 0;
-	border: solid .125rem var(--color-primary);	
+	border: none;	
 }
 
 .user-menu__button--avatar > img {  
@@ -460,6 +460,7 @@ textarea.form-control--invalid {
 	text-align: left;
 	font-size: 1.125rem;
 	line-height: 1;
+	text-transform: none;
 }
 
 .user-menu__profile-avatar {
