@@ -506,7 +506,12 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	l.renderPage(w, r, http.StatusOK, loginPageData{})
+	var flashData *flash
+	l.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flashData)
+
+	l.renderPage(w, r, http.StatusOK, loginPageData{
+		Flash: flashData,
+	})
 }
 
 func (l *LoginHandler) validateFields(values loginValues) (errors loginErrors, valid bool) {
@@ -613,8 +618,8 @@ func (g *GoogleAuthRedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		})
 		if err != nil {
 			if errors.Is(err, ErrUserEmailInUse) {
-				g.Log.Debug("Email is already in use.", "email", result.Email)
-				g.Error(w, r, http.StatusUnprocessableEntity, "Email already in use.")
+				g.Log.Debug("User is registered with different provider.", "email", result.Email)
+				g.Error(w, r, http.StatusUnprocessableEntity, "User is registered with different provider.")
 				return
 			}
 
