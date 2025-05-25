@@ -1,0 +1,46 @@
+{{ define "head" }}
+	<title>Account Setting - Amponin</title>
+	<link rel="stylesheet" href="/static/styles/pages/account/index.css">
+{{ end }}
+
+{{ define "content" }}
+	<div class="card card--sm account mx-auto">
+		<h1 class="card__heading account__heading">Account Settings</h1>	
+
+		{{ with .Flash }} 
+			<div class="card__flash 
+				{{ if eq .Level `success` -}} card__flash--success
+				{{- else if eq .Level `warn` -}} card__flash--warn 
+				{{- else if eq .Level `error` -}} card__flash--error {{- end -}}"
+			>
+				{{ .Message }}
+			</div>	
+		{{ end }}
+
+		<div class="account__profile">
+			<img class="account__profile-avatar" src="{{ with .LoginSession.Avatar -}} {{- .URL -}} {{- else -}} /static/default-user-avatar.png {{- end }}" />
+			<div class="account__profile-name"> {{ .LoginSession.Name }} </div>
+			<a href="/account/update-info" class="account__action">Edit Info</a>
+		</div>
+			<div class="account__field">
+				<div class="account__field-heading">
+					<h2 class="account__field-heading-text">Email</h2>
+					{{ if .IsLocalAccount }} <a href="#" class="account__field-heading-action account__action">Change Email</a> {{ end }}
+				</div>
+				<p class="account__field-value">{{ redact_email .LoginSession.Email }}</p>
+			</div>
+			<div class="account__field">
+				<div class="account__field-heading">
+					<h2 class="account__field-heading-text">Password</h2>
+					{{ if .IsLocalAccount }} 
+						<a href="#" class="account__field-heading-action account__action">Change Password</a>
+					{{ end }}
+				</div>
+				{{ if .IsLocalAccount }} 
+					<p class="account__field-value">********</p>
+				{{ else }}	
+					<p class="account__field-flash">You signed up with a foreign provider.</p>
+				{{ end }}
+			</div>
+	</div>
+{{ end }}

@@ -1,0 +1,37 @@
+{{ define "head" }}
+	<title>Update Account Info - Amponin</title>
+	<link rel="stylesheet" href="/static/styles/pages/account/update-info.css">
+{{ end }}
+
+{{ define "content" }}
+	<form class="card card--sm mx-auto" method="post" enctype="multipart/form-data">
+		<h1 class="card__heading">Update Account Info</h1>	
+		
+		{{ with .Flash }} 
+			<div class="card__flash 
+				{{ if eq .Level `success` -}} card__flash--success
+				{{- else if eq .Level `warn` -}} card__flash--warn 
+				{{- else if eq .Level `error` -}} card__flash--error {{- end -}}"
+			>
+				{{ .Message }}
+			</div>	
+		{{ end }}
+
+		<div>
+			<label for="avatar" class="form-label">Avatar</label>
+			<input id="avatar" type="file" accepts="image/*" name="avatar" class="form-control"
+				{{ with .FieldErrors.Avatar }} aria-invalid="true" {{ end }}
+			>
+			{{ with .FieldErrors.Avatar }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+		<div>
+			<label for="name" class="form-label">Name</label>
+			<input id="name" type="text" name="name" value="{{ .FieldValues.Name }}"
+				class="form-control {{ with .FieldErrors.Name }} form-control--invalid {{ end }}"
+				{{ with .FieldErrors.Name }} aria-invalid="true" {{ end }}
+			>
+			{{ with .FieldErrors.Name }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+		<button type="submit" class="button">Update</button>
+	</form>
+{{ end }}

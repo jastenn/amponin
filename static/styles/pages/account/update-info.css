@@ -1,0 +1,9 @@
+.account-update-info__back-control {
+	background-color: transparent;
+	padding: 0;
+	line-height: 1;
+	border: none;
+	cursor: pointer;
+	margin-right: auto;
+	width: 2rem;
+}

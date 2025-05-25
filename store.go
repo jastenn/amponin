@@ -188,6 +188,33 @@ func (p *PGStore) GetLocalAccount(ctx context.Context, email string) (*LocalAcco
 	return account, user, nil
 }
 
+func (p *PGStore) UpdateUser(ctx context.Context, userID string, data UserUpdateData) (*User, error) {
+	row := p.DB.QueryRowContext(ctx,
+		`UPDATE users SET
+			name = COALESCE($1, name),
+			email = COALESCE($2, email),
+			avatar = COALESCE($3, avatar),
+			updated_at = now()
+		WHERE user_id = $4
+		RETURNING 
+			user_id, name, email, avatar,
+			created_at, updated_at`,
+		data.Name, data.Email, data.Avatar, userID,
+	)
+
+	user := &User{}
+	err := row.Scan(
+		&user.ID, &user.Name, &user.Email, &user.Avatar,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		//TODO: catch duplicate email contraint differently
+		return nil, fmt.Errorf("unable to update user info: %w", err)
+	}
+
+	return user, nil
+}
+
 func (p *PGStore) RegisterShelter(ctx context.Context, userID string, data NewShelter) (*Shelter, error) {
 	tx, err := p.DB.BeginTx(ctx, nil)
 	if err != nil {

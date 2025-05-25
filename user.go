@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -84,10 +85,11 @@ type foreignAccountGetter interface {
 const sessionKeyLoginSession = "session_login"
 
 type loginSession struct {
-	UserID string
-	Name   string
-	Email  string
-	Avatar *Image
+	UserID    string
+	Name      string
+	Email     string
+	Avatar    *Image
+	ExpiresAt time.Time
 }
 
 type SignupHandler struct {
@@ -486,10 +488,11 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		loginSessionData := loginSession{
-			UserID: user.ID,
-			Name:   user.Name,
-			Email:  user.Email,
-			Avatar: user.Avatar,
+			UserID:    user.ID,
+			Name:      user.Name,
+			Email:     user.Email,
+			Avatar:    user.Avatar,
+			ExpiresAt: time.Now().Add(l.LoginSessionMaxAge),
 		}
 		err = l.SessionStore.Encode(w, sessionKeyLoginSession, loginSessionData, l.LoginSessionMaxAge)
 		if err != nil {
@@ -640,10 +643,11 @@ func (g *GoogleAuthRedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	}
 
 	data := &loginSession{
-		UserID: user.ID,
-		Name:   user.Name,
-		Email:  user.Email,
-		Avatar: user.Avatar,
+		UserID:    user.ID,
+		Name:      user.Name,
+		Email:     user.Email,
+		Avatar:    user.Avatar,
+		ExpiresAt: time.Now().Add(g.LoginSessionMaxAge),
 	}
 	g.SessionStore.Encode(w, sessionKeyLoginSession, data, g.LoginSessionMaxAge)
 
@@ -682,7 +686,7 @@ func (l *LogoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, l.SuccessRedirect, http.StatusSeeOther)
 }
 
-type AccountSettingsHandler struct {
+type AccountHandler struct {
 	Log                *slog.Logger
 	SessionStore       *CookieSessionStore
 	LocalAccountGetter localAccountGetter
@@ -690,6 +694,7 @@ type AccountSettingsHandler struct {
 
 type accountSettingsPageData struct {
 	basePageData
+	Flash          *flash
 	IsLocalAccount bool
 }
 
@@ -698,14 +703,14 @@ var accountSettingsPage = template.Must(
 		Funcs(template.FuncMap{
 			"redact_email": redactEmail,
 		}).
-		ParseFS(embedFS, "templates/pages/account/settings.html", "templates/pages/base.html"))
+		ParseFS(embedFS, "templates/pages/account/index.html", "templates/pages/base.html"))
 
-func (u *AccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (a *AccountHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var loginSessionData *loginSession
-	u.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+	a.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
 
 	if loginSessionData == nil {
-		u.Log.Error("Unauthenticated request.")
+		a.Log.Error("Unauthenticated request.")
 		renderErrorPage(w, errorPageData{
 			Status:  http.StatusUnauthorized,
 			Message: "Unauthenticated. Please login first.",
@@ -713,17 +718,17 @@ func (u *AccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	localAccount, _, err := u.LocalAccountGetter.GetLocalAccount(r.Context(), loginSessionData.Email)
+	localAccount, _, err := a.LocalAccountGetter.GetLocalAccount(r.Context(), loginSessionData.Email)
 	if err != nil && !errors.Is(err, ErrNoAccount) {
 		if errors.Is(err, ErrNoUser) {
-			u.Log.Debug("User no longer exists.")
+			a.Log.Debug("User no longer exists.")
 			renderErrorPage(w, errorPageData{
 				Status:  http.StatusBadRequest,
 				Message: "User no longer exists.",
 			})
 			return
 		}
-		u.Log.Error("Unable to get local account.", "error", err.Error())
+		a.Log.Error("Unable to get local account.", "error", err.Error())
 		renderErrorPage(w, errorPageData{
 			Status:  http.StatusInternalServerError,
 			Message: clientMessageUnexpectedError,
@@ -731,14 +736,18 @@ func (u *AccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	var flashData *flash
+	a.SessionStore.Decode(r, sessionKeyFlash, &flashData)
+
 	err = RenderPage(w, accountSettingsPage, http.StatusOK, accountSettingsPageData{
 		basePageData: basePageData{
 			LoginSession: loginSessionData,
 		},
+		Flash:          flashData,
 		IsLocalAccount: localAccount != nil,
 	})
 	if err != nil {
-		u.Log.Error("Unable to render page.", "error", err.Error())
+		a.Log.Error("Unable to render page.", "error", err.Error())
 		renderErrorPage(w, errorPageData{
 			basePageData: basePageData{
 				LoginSession: loginSessionData,
@@ -763,4 +772,169 @@ func redactEmail(s string) string {
 	parts[0] = fmt.Sprintf("%c*******", parts[0][0])
 
 	return strings.Join(parts, "@")
+}
+
+type AccountInfoUpdateHandler struct {
+	Log                *slog.Logger
+	SessionStore       *CookieSessionStore
+	ImageStore         *LocalImageStore
+	UserUpdater        userUpdater
+	SuccessRedirectURL string
+}
+
+type UserUpdateData struct {
+	Name   *string
+	Email  *string
+	Avatar *Image
+}
+
+type userUpdater interface {
+	UpdateUser(ctx context.Context, userID string, data UserUpdateData) (*User, error)
+}
+
+type accountInfoUpdatePageData struct {
+	basePageData
+	Flash       *flash
+	FieldValues accountInfoUpdateValues
+	FieldErrors accountInfoUpdateErrors
+}
+
+type accountInfoUpdateValues struct {
+	Name   string
+	Avatar *multipart.FileHeader
+}
+
+type accountInfoUpdateErrors struct {
+	Name   string
+	Avatar string
+}
+
+var accountInfoUpdatePage = template.Must(template.ParseFS(embedFS, "templates/pages/account/update_info.html", "templates/pages/base.html"))
+
+func (a *AccountInfoUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	a.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+
+	if loginSessionData == nil {
+		a.Log.Error("Unauthenticated request.")
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthenticated. Please login first.",
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		_, fh, err := r.FormFile("avatar")
+		if err != nil && !errors.Is(err, http.ErrMissingFile) {
+			a.Log.Error("Unable to parse avatar field.", "error", err.Error())
+			a.renderPage(w, http.StatusInternalServerError, accountInfoUpdatePageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Flash: newFlash(flashLevelError, clientMessageUnexpectedError),
+			})
+			return
+		}
+
+		var fieldErrors accountInfoUpdateErrors
+		fieldValues := accountInfoUpdateValues{
+			Name:   r.FormValue("name"),
+			Avatar: fh,
+		}
+
+		var avatar *Image
+		if fieldValues.Avatar != nil {
+			var err error
+			avatar, err = a.ImageStore.Store(fieldValues.Avatar)
+			if err != nil {
+				a.Log.Debug("Unable to store avatar.", "error", err.Error())
+				fieldErrors.Avatar = "Unable to upload avatar."
+				a.renderPage(w, http.StatusInternalServerError, accountInfoUpdatePageData{
+					basePageData: basePageData{
+						LoginSession: loginSessionData,
+					},
+					FieldErrors: fieldErrors,
+				})
+				return
+			}
+		}
+
+		if l := len(fieldValues.Name); l == 0 {
+			fieldErrors.Name = "Please fill out this field."
+		} else if l == 1 {
+			fieldErrors.Name = "Value is too short."
+		} else if l > 18 {
+			fieldErrors.Name = "Value is too long. It must not exceed 18 characters long."
+		}
+
+		if fieldErrors.Avatar != "" || fieldErrors.Name != "" {
+			a.Log.Debug("Field validation failed.", "field_errors", fieldErrors)
+			a.renderPage(w, http.StatusUnprocessableEntity, accountInfoUpdatePageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				FieldValues: fieldValues,
+				FieldErrors: fieldErrors,
+			})
+			return
+		}
+
+		user, err := a.UserUpdater.UpdateUser(r.Context(), loginSessionData.UserID, UserUpdateData{
+			Name:   &fieldValues.Name,
+			Avatar: avatar,
+		})
+		if err != nil {
+			a.Log.Error("Unable to update user.", "error", err.Error())
+			a.renderPage(w, http.StatusInternalServerError, accountInfoUpdatePageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Flash:       newFlash(flashLevelError, clientMessageUnexpectedError),
+				FieldValues: fieldValues,
+			})
+			return
+		}
+
+		loginSessionData.Avatar = user.Avatar
+		loginSessionData.Name = user.Name
+
+		expires := loginSessionData.ExpiresAt.Sub(time.Now())
+		err = a.SessionStore.Encode(w, sessionKeyLoginSession, loginSessionData, expires)
+		if err != nil {
+			a.Log.Error("Failed to update login session data.", "error", err.Error())
+		}
+
+		a.Log.Info("User info was successfully updated.", "user_id", user.ID)
+
+		flash := newFlash(flashLevelSuccess, "User info was updated successfully.")
+		a.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
+
+		http.Redirect(w, r, a.SuccessRedirectURL, http.StatusFound)
+		return
+	}
+
+	a.renderPage(w, http.StatusOK, accountInfoUpdatePageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		FieldValues: accountInfoUpdateValues{
+			Name: loginSessionData.Name,
+		},
+	})
+}
+
+func (a *AccountInfoUpdateHandler) renderPage(w http.ResponseWriter, status int, data accountInfoUpdatePageData) {
+	err := RenderPage(w, accountInfoUpdatePage, http.StatusOK, data)
+	if err != nil {
+		a.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: data.LoginSession,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
 }

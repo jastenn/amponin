@@ -1,33 +1,35 @@
-.account-settings {
+.account {
 	gap: 2rem;
 }
 
-.account-settings__profile {
+.account__profile {
 	text-align: center;
 }
 
-.account-settings__profile-avatar {
+.account__profile-avatar {
 	width: 5rem;
+	height: 5rem;
+	object-fit: cover;
 	border-radius: 9999px;
 	overflow: hidden;
 }
 
-.account-settings__profile-name {
+.account__profile-name {
 	font-size: 1.125rem;
 }
 
-.account-settings__action {
+.account__action {
 	color: var(--color-primary-muted);
 	text-transform: uppercase;
 	font-size: .875rem;
 }
 
-.account-settings__action:hover,
-.account-settings__action:focus {
+.account__action:hover,
+.account__action:focus {
 	color: var(--color-primary-muted-focus);
 }
 
-.account-settings__field-heading {
+.account__field-heading {
 	text-transform: uppercase;
 	display: flex;
 	align-items: baseline;
@@ -35,16 +37,16 @@
 	margin-bottom: .35em;
 }
 
-.account-settings__field-heading-text {
+.account__field-heading-text {
 	font-size: 1rem;
 	margin: 0;
 }
 
-.account-settings__field-value {
+.account__field-value {
 	margin: 0;
 }
 
-.account-settings__field-flash {
+.account__field-flash {
 	margin: 0;
 	padding: var(--element-spacing-vertical) var(--element-spacing-horizontal);
 	background-color: var(--color-warn-muted);
