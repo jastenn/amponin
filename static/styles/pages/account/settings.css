@@ -1,0 +1,44 @@
+.account-settings {
+	gap: 2rem;
+}
+
+.account-settings__profile {
+	text-align: center;
+}
+
+.account-settings__profile-avatar {
+	width: 5rem;
+	border-radius: 9999px;
+	overflow: hidden;
+}
+
+.account-settings__profile-name {
+	font-size: 1.125rem;
+}
+
+.account-settings__action {
+	color: var(--color-primary-muted);
+	text-transform: uppercase;
+	font-size: .875rem;
+}
+
+.account-settings__action:hover,
+.account-settings__action:focus {
+	color: var(--color-primary-muted-focus);
+}
+
+.account-settings__field-heading {
+	text-transform: uppercase;
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+}
+
+.account-settings__field-heading-text {
+	font-size: 1rem;
+	margin: 0;
+}
+
+.account-settings__field-value {
+	margin: 0;
+}

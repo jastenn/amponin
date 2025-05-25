@@ -129,6 +129,11 @@ func main() {
 		SessionStore:    sessionStore,
 		SuccessRedirect: "/",
 	})
+	mux.Handle("/account/settings", &AccountSettingsHandler{
+		Log:                log,
+		SessionStore:       sessionStore,
+		LocalAccountGetter: store,
+	})
 	mux.Handle("/shelter", &ListManagedShelterHandler{
 		Log:                  log,
 		SessionStore:         sessionStore,

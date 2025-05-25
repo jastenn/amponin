@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/mail"
+	"strings"
 	"time"
 
 	nanoid "github.com/matoous/go-nanoid/v2"
@@ -676,4 +677,71 @@ func (l *LogoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.SessionStore.DecodeAndRemove(w, r, sessionKeyLoginSession, &login)
 	l.Log.Debug("User logged out.", "user_id", login.UserID)
 	http.Redirect(w, r, l.SuccessRedirect, http.StatusSeeOther)
+}
+
+type AccountSettingsHandler struct {
+	Log                *slog.Logger
+	SessionStore       *CookieSessionStore
+	LocalAccountGetter localAccountGetter
+}
+
+type accountSettingsPageData struct {
+	basePageData
+	IsLocalAccount bool
+}
+
+var accountSettingsPage = template.Must(
+	template.New("account_settings.html").
+		Funcs(template.FuncMap{
+			"redact_email": redactEmail,
+		}).
+		ParseFS(embedFS, "templates/pages/account/settings.html", "templates/pages/base.html"))
+
+func (u *AccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	u.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+
+	if loginSessionData == nil {
+		u.Log.Error("Unauthenticated request.")
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthenticated. Please login first.",
+		})
+		return
+	}
+
+	localAccount, _, err := u.LocalAccountGetter.GetLocalAccount(r.Context(), loginSessionData.Email)
+
+	err = RenderPage(w, accountSettingsPage, http.StatusOK, accountSettingsPageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		IsLocalAccount: localAccount != nil,
+	})
+	if err != nil {
+		u.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+}
+
+func redactEmail(s string) string {
+	if s == "" {
+		return ""
+	}
+
+	parts := strings.Split(s, "@")
+	if len(parts) != 2 {
+		panic("unable to parse email")
+	}
+
+	parts[0] = fmt.Sprintf("%c*******", parts[0][0])
+
+	return strings.Join(parts, "@")
 }

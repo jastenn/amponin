@@ -1,0 +1,31 @@
+{{ define "head" }}
+	<title>Account Setting - Amponin</title>
+	<link rel="stylesheet" href="/static/styles/pages/account/settings.css">
+{{ end }}
+
+{{ define "content" }}
+	<div class="card card--sm account-settings mx-auto">
+		<h1 class="card__heading account-settings__heading">Account Settings</h1>	
+		<div class="account-settings__profile">
+			<img class="account-settings__profile-avatar" src="{{ with .LoginSession.AvatarURL -}} {{- . -}} {{- else -}} /static/default-user-avatar.png {{- end }}" />
+			<div class="account-settings__profile-name"> {{ .LoginSession.Name }} </div>
+			<a href="#" class="account-settings__action">Edit Info</a>
+		</div>
+		{{ if .IsLocalAccount }}
+			<div class="account-settings__field">
+				<div class="account-settings__field-heading">
+					<h2 class="account-settings__field-heading-text">Email</h2>
+					<a href="#" class="account-settings__field-heading-action account-settings__action">Change Email</a>
+				</div>
+				<p class="account-settings__field-value">{{ redact_email .LoginSession.Email }}</p>
+			</div>
+			<div class="account-settings__field">
+				<div class="account-settings__field-heading">
+					<h2 class="account-settings__field-heading-text">Password</h2>
+					<a href="#" class="account-settings__field-heading-action account-settings__action">Change Password</a>
+				</div>
+				<p class="account-settings__field-value">********</p>
+			</div>
+		{{ end }}	
+	</div>
+{{ end }}
