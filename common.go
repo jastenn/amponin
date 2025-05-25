@@ -52,7 +52,10 @@ func renderErrorPage(w http.ResponseWriter, data errorPageData) {
 
 type ImageProvider string
 
-const ImageProviderLocal ImageProvider = "local"
+const (
+	ImageProviderLocal   ImageProvider = "local"
+	ImageProviderForeign ImageProvider = "foreign"
+)
 
 type Image struct {
 	URL      string

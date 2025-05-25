@@ -27,12 +27,12 @@ func (c *PGStore) CreateLocalAccount(ctx context.Context, data NewLocalAccount) 
 		`INSERT INTO users (name, email)
 		 VALUES ($1, $2)
 		 RETURNING
-			user_id, name, email, avatar_url,
+			user_id, name, email, avatar,
 			created_at, updated_at`,
 		data.Name, data.Email,
 	)
 	err = row.Scan(
-		&user.ID, &user.Name, &user.Email, &user.AvatarURL,
+		&user.ID, &user.Name, &user.Email, &user.Avatar,
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -72,15 +72,15 @@ func (c *PGStore) CreateForeignAccount(ctx context.Context, data NewForeignAccou
 
 	user := &User{}
 	row := tx.QueryRowContext(ctx,
-		`INSERT INTO users (name, email, avatar_url)
+		`INSERT INTO users (name, email, avatar)
 		 VALUES ($1, $2, $3)
 		 RETURNING
-			user_id, name, email, avatar_url,
+			user_id, name, email, avatar,
 			created_at, updated_at`,
-		data.Name, data.Email, data.AvatarURL,
+		data.Name, data.Email, data.Avatar,
 	)
 	err = row.Scan(
-		&user.ID, &user.Name, &user.Email, &user.AvatarURL,
+		&user.ID, &user.Name, &user.Email, &user.Avatar,
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -131,14 +131,14 @@ func (p *PGStore) GetForeignAccount(ctx context.Context, provider, providerID st
 	user := &User{}
 	row = p.DB.QueryRowContext(ctx,
 		`SELECT
-			user_id, name, email, avatar_url,
+			user_id, name, email, avatar,
 			created_at, updated_at
 		 FROM users
 		 WHERE user_id = $1`,
 		userID,
 	)
 	err = row.Scan(
-		&user.ID, &user.Name, &user.Email, &user.AvatarURL,
+		&user.ID, &user.Name, &user.Email, &user.Avatar,
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -152,14 +152,14 @@ func (p *PGStore) GetLocalAccount(ctx context.Context, email string) (*LocalAcco
 	user := &User{}
 	row := p.DB.QueryRowContext(ctx,
 		`SELECT
-			user_id, name, email, avatar_url,
+			user_id, name, email, avatar,
 			created_at, updated_at
 		 FROM users
 		 WHERE email = $1`,
 		email,
 	)
 	err := row.Scan(
-		&user.ID, &user.Name, &user.Email, &user.AvatarURL,
+		&user.ID, &user.Name, &user.Email, &user.Avatar,
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -239,7 +239,7 @@ func (p *PGStore) RegisterShelter(ctx context.Context, userID string, data NewSh
 func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelter, error) {
 	row := p.DB.QueryRowContext(ctx,
 		`SELECT
-			shelter_id, name, avatar_url, address, 
+			shelter_id, name, avatar, address, 
 			ST_Y(coordinates), ST_X(coordinates), description, created_at,
 			updated_at
 		 FROM shelters
@@ -267,7 +267,7 @@ func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelte
 func (p *PGStore) FindManagedShelter(ctx context.Context, userID string) ([]*ManagedShelterResult, error) {
 	rows, err := p.DB.QueryContext(ctx,
 		`SELECT
-			s.shelter_id, name, avatar_url, address, 
+			s.shelter_id, name, avatar, address, 
 			ST_Y(coordinates), ST_X(coordinates), description, created_at,
 			updated_at, role
 		 FROM shelters as s
@@ -363,7 +363,7 @@ func (p *PGStore) GetPetByID(ctx context.Context, id string) (*Pet, *Shelter, er
 			pet_id, p.name, gender, type,
 			birth_date, is_birth_date_approx, images, p.description,
 			registered_at, p.updated_at,
-			s.shelter_id, s.name, avatar_url, address, 
+			s.shelter_id, s.name, avatar, address, 
 			ST_Y(coordinates), ST_X(coordinates), s.description, s.created_at,
 			s.updated_at
 		 FROM pets p

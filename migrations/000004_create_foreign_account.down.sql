@@ -1,1 +1,1 @@
-drop table if exists foreign_account;
+drop table if exists foreign_accounts;

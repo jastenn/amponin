@@ -22,12 +22,12 @@
 				{{ with .LoginSession }}
 					<div id="user-menu" class="user-menu" data-js-active-class="user-menu--active">
 						<button id="user-menu-button" class="user-menu__button user-menu__button--avatar">
-							<img src="{{ with .AvatarURL }} {{ . }} {{ else -}} /static/default-user-avatar.png {{- end }}" alt="">
+							<img src="{{ with .Avatar }} {{ .URL }} {{ else -}} /static/default-user-avatar.png {{- end }}" alt="">
 							<span class="sr-only">User Menu</span>
 						</button>
 						<div id="user-menu-items" class="user-menu__items">
 							<div class="user-menu__item user-menu__profile">
-								<img src="{{ with .AvatarURL -}} {{ . }} {{- else -}} /static/default-user-avatar.png {{- end }}" alt="" class="user-menu__profile-avatar">
+								<img src="{{ with .Avatar -}} {{ .URL }} {{- else -}} /static/default-user-avatar.png {{- end }}" alt="" class="user-menu__profile-avatar">
 								<div>
 									<p class="user-menu__profile-name" title="{{ .Name }}">{{ .Name }}</p>
 									<a href="/account/settings">Edit Info</a>	

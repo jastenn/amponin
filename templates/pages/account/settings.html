@@ -7,7 +7,7 @@
 	<div class="card card--sm account-settings mx-auto">
 		<h1 class="card__heading account-settings__heading">Account Settings</h1>	
 		<div class="account-settings__profile">
-			<img class="account-settings__profile-avatar" src="{{ with .LoginSession.AvatarURL -}} {{- . -}} {{- else -}} /static/default-user-avatar.png {{- end }}" />
+			<img class="account-settings__profile-avatar" src="{{ with .LoginSession.Avatar -}} {{- .URL -}} {{- else -}} /static/default-user-avatar.png {{- end }}" />
 			<div class="account-settings__profile-name"> {{ .LoginSession.Name }} </div>
 			<a href="#" class="account-settings__action">Edit Info</a>
 		</div>

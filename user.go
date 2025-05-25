@@ -27,7 +27,7 @@ type User struct {
 	ID        string
 	Name      string
 	Email     string
-	AvatarURL *string
+	Avatar    *Image
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -68,7 +68,7 @@ type ForeignAccount struct {
 type NewForeignAccount struct {
 	Name       string
 	Email      string
-	AvatarURL  string
+	Avatar     *Image
 	Provider   string
 	ProviderID string
 }
@@ -84,10 +84,10 @@ type foreignAccountGetter interface {
 const sessionKeyLoginSession = "session_login"
 
 type loginSession struct {
-	UserID    string
-	Name      string
-	Email     string
-	AvatarURL *string
+	UserID string
+	Name   string
+	Email  string
+	Avatar *Image
 }
 
 type SignupHandler struct {
@@ -486,10 +486,10 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		loginSessionData := loginSession{
-			UserID:    user.ID,
-			Name:      user.Name,
-			Email:     user.Email,
-			AvatarURL: user.AvatarURL,
+			UserID: user.ID,
+			Name:   user.Name,
+			Email:  user.Email,
+			Avatar: user.Avatar,
 		}
 		err = l.SessionStore.Encode(w, sessionKeyLoginSession, loginSessionData, l.LoginSessionMaxAge)
 		if err != nil {
@@ -613,9 +613,12 @@ func (g *GoogleAuthRedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		account, user, err = g.ForeignAccountCreator.CreateForeignAccount(r.Context(), NewForeignAccount{
 			ProviderID: result.ID,
 			Provider:   ForeignProviderGoogle,
-			AvatarURL:  result.Picture,
-			Name:       result.Name,
-			Email:      result.Email,
+			Avatar: &Image{
+				Provider: ImageProviderForeign,
+				URL:      result.Picture,
+			},
+			Name:  result.Name,
+			Email: result.Email,
 		})
 		if err != nil {
 			if errors.Is(err, ErrUserEmailInUse) {
@@ -637,10 +640,10 @@ func (g *GoogleAuthRedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	}
 
 	data := &loginSession{
-		UserID:    user.ID,
-		Name:      user.Name,
-		Email:     user.Email,
-		AvatarURL: user.AvatarURL,
+		UserID: user.ID,
+		Name:   user.Name,
+		Email:  user.Email,
+		Avatar: user.Avatar,
 	}
 	g.SessionStore.Encode(w, sessionKeyLoginSession, data, g.LoginSessionMaxAge)
 
@@ -711,6 +714,22 @@ func (u *AccountSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	localAccount, _, err := u.LocalAccountGetter.GetLocalAccount(r.Context(), loginSessionData.Email)
+	if err != nil && !errors.Is(err, ErrNoAccount) {
+		if errors.Is(err, ErrNoUser) {
+			u.Log.Debug("User no longer exists.")
+			renderErrorPage(w, errorPageData{
+				Status:  http.StatusBadRequest,
+				Message: "User no longer exists.",
+			})
+			return
+		}
+		u.Log.Error("Unable to get local account.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
 
 	err = RenderPage(w, accountSettingsPage, http.StatusOK, accountSettingsPageData{
 		basePageData: basePageData{

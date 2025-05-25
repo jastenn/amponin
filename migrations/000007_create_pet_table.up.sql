@@ -1,7 +1,3 @@
-create type image as (
-    provider text,
-    url text
-);
 create type gender as enum('male', 'female');
 create type pet_type as enum('cat', 'dog');
 create table if not exists pets (
