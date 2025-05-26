@@ -154,7 +154,7 @@ a:not([class]):focus {
 
 .button--with-icon {
 	--icon-size: calc(var(--element-spacing-vertical)*2.5);
-	padding-inline: calc(var(--icon-size) + var(--element-spacing-horizontal) + .5rem);
+	padding-inline: calc(var(--icon-size) + var(--element-spacing-horizontal) + .25em);
 	position: relative;
 }
 
@@ -173,6 +173,11 @@ a:not([class]):focus {
 
 .button--small-icon {
 	--icon-size: calc(var(--element-spacing-vertical)*2);
+}
+
+.button--small {
+	font-size: .875rem;
+	--icon-size: calc(var(--element-spacing-vertical)*1.5);
 }
 
 .form-label {
