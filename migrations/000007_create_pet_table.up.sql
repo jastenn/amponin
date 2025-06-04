@@ -1,5 +1,10 @@
-create type gender as enum('male', 'female');
-create type pet_type as enum('cat', 'dog');
+do $$ begin
+    create type gender as enum('male', 'female');
+    create type pet_type as enum('cat', 'dog');
+exception
+    when duplicate_object then null;
+end $$;
+
 create table if not exists pets (
     pet_id text primary key default nanoid(8),
     shelter_id text references shelters(shelter_id), 

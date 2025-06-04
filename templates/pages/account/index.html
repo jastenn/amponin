@@ -5,17 +5,20 @@
 
 {{ define "content" }}
 	<div class="card card--sm account mx-auto">
-		<h1 class="card__heading account__heading">Account Settings</h1>	
+		<div>
+			<h1 class="card__heading account__heading">Account Settings</h1>	
 
-		{{ with .Flash }} 
-			<div class="card__flash 
-				{{ if eq .Level `success` -}} card__flash--success
-				{{- else if eq .Level `warn` -}} card__flash--warn 
-				{{- else if eq .Level `error` -}} card__flash--error {{- end -}}"
-			>
-				{{ .Message }}
-			</div>	
-		{{ end }}
+			{{ with .Flash }} 
+				<div class="card__flash 
+					{{ if eq .Level `success` -}} card__flash--success
+					{{- else if eq .Level `warn` -}} card__flash--warn 
+					{{- else if eq .Level `error` -}} card__flash--error {{- end -}}"
+				>
+					{{ .Message }}
+				</div>	
+			{{ end }}
+			
+		</div>
 
 		<div class="account__profile">
 			<img class="account__profile-avatar" src="{{ with .LoginSession.Avatar -}} {{- .URL -}} {{- else -}} /static/default-user-avatar.png {{- end }}" />
@@ -25,7 +28,7 @@
 			<div class="account__field">
 				<div class="account__field-heading">
 					<h2 class="account__field-heading-text">Email</h2>
-					{{ if .IsLocalAccount }} <a href="#" class="account__field-heading-action account__action">Change Email</a> {{ end }}
+					{{ if .IsLocalAccount }} <a href="/account/change-email/request" class="account__field-heading-action account__action">Change Email</a> {{ end }}
 				</div>
 				<p class="account__field-value">{{ redact_email .LoginSession.Email }}</p>
 			</div>

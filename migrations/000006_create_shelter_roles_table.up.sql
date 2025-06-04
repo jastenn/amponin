@@ -1,4 +1,8 @@
-CREATE TYPE role as ENUM('super_admin', 'admin', 'editor');
+do $$ begin
+    create type role as enum('super_admin', 'admin', 'editor');
+exception
+    when duplicate_object then null;
+end $$;
 
 CREATE TABLE IF NOT EXISTS shelter_roles (
     shelter_id text not null references shelters(shelter_id),

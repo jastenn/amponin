@@ -90,6 +90,14 @@ type loginSession struct {
 	Email     string
 	Avatar    *Image
 	ExpiresAt time.Time
+
+	EmailChangeState *loginSessionEmailChangeState
+}
+
+type loginSessionEmailChangeState struct {
+	ExpiresAt  time.Time
+	IsVerified bool
+	NewEmail   string
 }
 
 type SignupHandler struct {
@@ -217,7 +225,7 @@ func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		go func() {
-			err = s.MailSender.SendMail(r.Context(), fieldValues.Email, b.Bytes())
+			err = s.MailSender.SendMail(context.TODO(), fieldValues.Email, b.Bytes())
 			if err != nil {
 				s.Log.Error("Unable to send confirmation email.", "error", err.Error())
 			}
@@ -934,6 +942,433 @@ func (a *AccountInfoUpdateHandler) renderPage(w http.ResponseWriter, status int,
 			},
 			Status:  http.StatusInternalServerError,
 			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+}
+
+type AccountChangeEmailRequestHandler struct {
+	Log                *slog.Logger
+	SessionStore       *CookieSessionStore
+	MailSender         MailSender
+	SuccessRedirectURL string
+	ErrorRedirectURL   string
+}
+
+type accountChangeEmailRequestPageData struct {
+	basePageData
+	Flash *flash
+	Code  string
+	Error string
+}
+
+var accountChangeEmailRequestPage = template.Must(template.ParseFS(embedFS, "templates/pages/account/change_email_request.html", "templates/pages/base.html"))
+
+var sessionKeyChangeEmailRequestVerification = "session_change_email_request_verification"
+
+func (a *AccountChangeEmailRequestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	a.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+
+	if loginSessionData == nil {
+		a.Log.Error("Unauthorized. User is not logged in.")
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized. Please login first.",
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		var correctVerificationCode string
+		a.SessionStore.Decode(r, sessionKeyChangeEmailRequestVerification, &correctVerificationCode)
+
+		verificationCode := r.FormValue("verification-code")
+		var errorMessage string
+		if verificationCode == "" {
+			errorMessage = "Please fill out this field."
+		}
+		if errorMessage == "" && verificationCode != correctVerificationCode {
+			errorMessage = "Verification code is invalid."
+		}
+
+		if errorMessage != "" {
+			a.Log.Debug("Verification code validation failed.", "validation_error", errorMessage)
+			a.renderPage(w, http.StatusUnprocessableEntity, accountChangeEmailRequestPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Code:  verificationCode,
+				Error: errorMessage,
+			})
+			return
+		}
+
+		loginSessionData.EmailChangeState = &loginSessionEmailChangeState{
+			ExpiresAt:  time.Now().Add(time.Minute * 5),
+			IsVerified: true,
+		}
+		err := a.SessionStore.Encode(w, sessionKeyLoginSession, loginSessionData, loginSessionData.ExpiresAt.Sub(time.Now()))
+		if err != nil {
+			a.Log.Error("Unable to encode verification code to session store.", "error", err.Error())
+			flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
+			a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+			http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
+			return
+		}
+
+		a.Log.Info("Email change verification successful.", "user_id", loginSessionData.UserID)
+		http.Redirect(w, r, a.SuccessRedirectURL, http.StatusSeeOther)
+		return
+	}
+
+	verificationCode := nanoid.MustGenerate(nanoidGenerator, 6)
+
+	err := a.SessionStore.Encode(w, sessionKeyChangeEmailRequestVerification, verificationCode, time.Minute*5)
+	if err != nil {
+		a.Log.Error("Unable to encode verification code to session.", "error", err.Error())
+		flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
+		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+		http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
+		return
+	}
+
+	var b bytes.Buffer
+	fmt.Fprintln(&b, "Subject: Email Update Verification")
+	fmt.Fprintln(&b, "Content-Type: text/html")
+	fmt.Fprintln(&b, "")
+	err = verificationEmail.Execute(&b, verificationEmailData{
+		Name:    loginSessionData.Name,
+		Message: "We received a request to change the email address of your account.",
+		Code:    verificationCode,
+	})
+	if err != nil {
+		a.Log.Error("Unable to execute confirmation mail template.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+
+	go func() {
+		err := a.MailSender.SendMail(context.TODO(), loginSessionData.Email, b.Bytes())
+		if err != nil {
+			a.Log.Error("Unable to send mail.", "error", err.Error())
+		}
+	}()
+
+	a.renderPage(w, http.StatusOK, accountChangeEmailRequestPageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		Flash: newFlash(flashLevelSuccess, "A verification code was sent on your email."),
+	})
+}
+
+func (a *AccountChangeEmailRequestHandler) renderPage(w http.ResponseWriter, status int, data accountChangeEmailRequestPageData) {
+	err := RenderPage(w, accountChangeEmailRequestPage, status, data)
+	if err != nil {
+		a.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: data.basePageData,
+			Status:       status,
+			Message:      clientMessageUnexpectedError,
+		})
+		return
+	}
+}
+
+type AccountEmailChangeHandler struct {
+	Log                     *slog.Logger
+	SessionStore            *CookieSessionStore
+	ErrorRedirectURL        string
+	VerificationRedirectURL string
+	MailSender              MailSender
+}
+
+type accountEmailChangePageData struct {
+	basePageData
+	Flash    *flash
+	NewEmail string
+	Error    string
+}
+
+var accountEmailChangePage = template.Must(template.ParseFS(embedFS, "templates/pages/account/change_email.html", "templates/pages/base.html"))
+
+var sessionKeyNewEmailVerificationCode = "session_key_new_email_verification"
+
+func (a *AccountEmailChangeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	a.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+	if loginSessionData == nil {
+		a.Log.Error("Unauthorized. User is not logged in.")
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusUnauthorized,
+			Message: "Unathorized. Please login first.",
+		})
+		return
+	}
+
+	if !loginSessionData.EmailChangeState.IsVerified {
+		a.Log.Debug("Unauthorized email change.")
+		flashData := newFlash(flashLevelError, "Unauthorized. Please complete the verification step.")
+		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+		http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
+		return
+	}
+
+	if loginSessionData.EmailChangeState.ExpiresAt.Before(time.Now()) {
+		a.Log.Debug("Verification code is expired.", "verification_code_expiry", loginSessionData.EmailChangeState.ExpiresAt.String())
+		flashData := newFlash(flashLevelError, "Verification code is expired. Please try again.")
+		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+		http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		newEmail := r.FormValue("new-email")
+
+		var validationError string
+		if newEmail == "" {
+			validationError = "Please fill out this field."
+		}
+		if _, err := mail.ParseAddress(newEmail); validationError == "" && err != nil {
+			validationError = "Invalid email."
+		}
+		if validationError != "" {
+			a.Log.Debug("New email fails validation.", "validation_error", validationError)
+			a.renderPage(w, http.StatusUnprocessableEntity, accountEmailChangePageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				NewEmail: newEmail,
+				Error:    validationError,
+			})
+			return
+		}
+
+		loginSessionData.EmailChangeState.ExpiresAt = time.Now().Add(time.Minute * 5)
+		loginSessionData.EmailChangeState.NewEmail = newEmail
+
+		err := a.SessionStore.Encode(w, sessionKeyLoginSession, loginSessionData, loginSessionData.ExpiresAt.Sub(time.Now()))
+		if err != nil {
+			a.Log.Error("Failed to update login session data")
+			flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
+			a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+			http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
+			return
+		}
+
+		verificationCode := nanoid.MustGenerate(nanoidGenerator, 6)
+
+		err = a.SessionStore.Encode(w, sessionKeyNewEmailVerificationCode, verificationCode, time.Minute*5)
+		if err != nil {
+			a.Log.Error("Unable to encode verification code to session.", "error", err.Error())
+			flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
+			a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+			http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
+			return
+		}
+
+		var b bytes.Buffer
+		fmt.Fprintln(&b, "Subject: Verify Your New Email Address for Amponin")
+		fmt.Fprintln(&b, "Content-Type: text/html")
+		fmt.Fprintln(&b, "")
+
+		err = verificationEmail.Execute(&b, verificationEmailData{
+			Name:    loginSessionData.Name,
+			Message: "You're receiving this because a request was made to change your account's email address to this one.",
+			Code:    verificationCode,
+		})
+		if err != nil {
+			a.Log.Error("Unable to write email template.", "error", err.Error())
+			flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
+			a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+			http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
+			return
+		}
+
+		go func() {
+			err := a.MailSender.SendMail(context.TODO(), newEmail, b.Bytes())
+			if err != nil {
+				a.Log.Error("Unable to send mail.", "error", err.Error())
+			}
+		}()
+
+		a.Log.Info("Verification code was sent on new email.", "new_email", newEmail)
+
+		flashData := newFlash(flashLevelSuccess, "A verification code was sent on your new email.")
+		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		http.Redirect(w, r, a.VerificationRedirectURL, http.StatusSeeOther)
+		return
+	}
+
+	var flashData *flash
+	a.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flashData)
+
+	a.renderPage(w, http.StatusOK, accountEmailChangePageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		Flash: flashData,
+	})
+}
+
+func (a *AccountEmailChangeHandler) renderPage(w http.ResponseWriter, status int, data accountEmailChangePageData) {
+	err := RenderPage(w, accountEmailChangePage, status, data)
+	if err != nil {
+		a.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: data.basePageData,
+			Status:       status,
+			Message:      clientMessageUnexpectedError,
+		})
+		return
+	}
+}
+
+type AccountChangeEmailVerificationHandler struct {
+	Log                *slog.Logger
+	SessionStore       *CookieSessionStore
+	UserUpdateData     userUpdater
+	ErrorRedirectURL   string
+	SuccessRedirectURL string
+}
+
+type accountChangeEmailVerificationPageData struct {
+	basePageData
+	Flash *flash
+	Code  string
+	Error string
+}
+
+var accountChangeEmailVerificationPage = template.Must(template.ParseFS(embedFS, "templates/pages/account/change_email_verification.html", "templates/pages/base.html"))
+
+func (a *AccountChangeEmailVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	a.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+	if loginSessionData == nil {
+		a.Log.Error("Unauthorized. User is not logged in.")
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusUnauthorized,
+			Message: "Unathorized. Please login first.",
+		})
+		return
+	}
+
+	if !loginSessionData.EmailChangeState.IsVerified {
+		a.Log.Debug("Unauthorized email change.")
+		flashData := newFlash(flashLevelError, "Unauthorized. Please complete the verification step.")
+		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+		http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
+		return
+	}
+
+	if loginSessionData.EmailChangeState.ExpiresAt.Before(time.Now()) {
+		a.Log.Debug("Verification code is expired.", "verification_code_expiry", loginSessionData.EmailChangeState.ExpiresAt.String())
+		flashData := newFlash(flashLevelError, "Verification code is expired. Please try again.")
+		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+		http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		newEmail := loginSessionData.EmailChangeState.NewEmail
+		var correctVerificationCode string
+		err := a.SessionStore.Decode(r, sessionKeyNewEmailVerificationCode, &correctVerificationCode)
+		if err != nil {
+			a.Log.Error("Unable to decode verification code from session.", "error", err.Error())
+			flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
+			a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+			http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
+			return
+		}
+
+		verificationCode := r.FormValue("verification-code")
+		var validationError string
+		if verificationCode == "" {
+			validationError = "Please fill out this field."
+		}
+		if validationError == "" && verificationCode != correctVerificationCode {
+			validationError = "Verification code is invalid."
+		}
+
+		if validationError != "" {
+			a.Log.Debug("Verification code failed validation.", "validation_error", validationError)
+			a.renderPage(w, http.StatusUnprocessableEntity, accountChangeEmailVerificationPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Code:  verificationCode,
+				Error: validationError,
+			})
+			return
+		}
+
+		user, err := a.UserUpdateData.UpdateUser(r.Context(), loginSessionData.UserID, UserUpdateData{
+			Email: &newEmail,
+		})
+		if err != nil {
+			var flashData *flash
+			if errors.Is(err, ErrUserEmailInUse) {
+				a.Log.Debug("Email is already in use.", "email", newEmail)
+				flashData = newFlash(flashLevelError, "Email is already in use.")
+
+			} else {
+				a.Log.Error("Unexpected error while updating user email.", "error", err.Error())
+				flashData = newFlash(flashLevelError, clientMessageUnexpectedError)
+			}
+			a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+			http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
+			return
+		}
+
+		a.Log.Info("Successfully changed email.", "user_id", user.ID, "new_email", newEmail, "old_email", loginSessionData.Email)
+
+		loginSessionData.EmailChangeState = nil
+		loginSessionData.Email = newEmail
+
+		err = a.SessionStore.Encode(w, sessionKeyLoginSession, loginSessionData, loginSessionData.ExpiresAt.Sub(time.Now()))
+		if err != nil {
+			a.Log.Error("Unable to update login session data.", "error", err.Error())
+		}
+
+		flashData := newFlash(flashLevelSuccess, "Change email was successful.")
+		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		http.Redirect(w, r, a.SuccessRedirectURL, http.StatusSeeOther)
+
+		return
+	}
+
+	var flashData *flash
+	a.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flashData)
+
+	a.renderPage(w, http.StatusOK, accountChangeEmailVerificationPageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		Flash: flashData,
+	})
+}
+
+func (a *AccountChangeEmailVerificationHandler) renderPage(w http.ResponseWriter, status int, data accountChangeEmailVerificationPageData) {
+	err := RenderPage(w, accountChangeEmailVerificationPage, status, data)
+	if err != nil {
+		a.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: data.basePageData,
+			Status:       http.StatusInternalServerError,
+			Message:      clientMessageUnexpectedError,
 		})
 		return
 	}

@@ -208,7 +208,9 @@ func (p *PGStore) UpdateUser(ctx context.Context, userID string, data UserUpdate
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		//TODO: catch duplicate email contraint differently
+		if strings.Contains(err.Error(), "unique_user_email") {
+			return nil, ErrUserEmailInUse
+		}
 		return nil, fmt.Errorf("unable to update user info: %w", err)
 	}
 

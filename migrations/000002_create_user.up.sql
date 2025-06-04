@@ -1,9 +1,13 @@
 create extension if not exists citext;
 
-create type image as (
-    provider text,
-    url text
-);
+do $$ begin
+    create type image as (
+        provider text,
+        url text
+    );
+exception
+    when duplicate_object then null;
+end $$;
 
 create table if not exists users (
     user_id text primary key default nanoid(8),

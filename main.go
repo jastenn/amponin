@@ -141,6 +141,27 @@ func main() {
 		UserUpdater:        store,
 		SuccessRedirectURL: "/account",
 	})
+	mux.Handle("/account/change-email/request", &AccountChangeEmailRequestHandler{
+		Log:                log,
+		SessionStore:       sessionStore,
+		MailSender:         mailSender,
+		SuccessRedirectURL: "/account/change-email",
+		ErrorRedirectURL:   "/account",
+	})
+	mux.Handle("/account/change-email", &AccountEmailChangeHandler{
+		Log:                     log,
+		SessionStore:            sessionStore,
+		MailSender:              mailSender,
+		VerificationRedirectURL: "/account/change-email/verification",
+		ErrorRedirectURL:        "/account",
+	})
+	mux.Handle("/account/change-email/verification", &AccountChangeEmailVerificationHandler{
+		Log:                log,
+		SessionStore:       sessionStore,
+		UserUpdateData:     store,
+		SuccessRedirectURL: "/account",
+		ErrorRedirectURL:   "/account",
+	})
 	mux.Handle("/shelter", &ListManagedShelterHandler{
 		Log:                  log,
 		SessionStore:         sessionStore,

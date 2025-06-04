@@ -2,6 +2,10 @@
 	gap: 2rem;
 }
 
+.account .card__flash {
+	margin-top: 1rem;
+}
+
 .account__profile {
 	text-align: center;
 }
