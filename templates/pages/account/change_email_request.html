@@ -4,18 +4,16 @@
 
 {{ define "content" }}
 	<form class="card card--sm mx-auto" method="post">
-		<div>
-			<h1 class="card__heading">Change Email Request</h1>		
-			{{ with .Flash }} 
+		<h1 class="card__heading">Change Email Request</h1>		
+		{{ with .Flash }} 
 			<div class="card__flash 
-					{{ if eq .Level `success` -}} card__flash--success
-					{{- else if eq .Level `warn` -}} card__flash--warn 
-					{{- else if eq .Level `error` -}} card__flash--error {{- end -}}"
-				>
-					{{ .Message }}
-				</div>	
-			{{ end }}
-		</div>
+				{{ if eq .Level `success` -}} card__flash--success
+				{{- else if eq .Level `warn` -}} card__flash--warn 
+				{{- else if eq .Level `error` -}} card__flash--error {{- end -}}"
+			>
+				{{ .Message }}
+			</div>	
+		{{ end }}
 		<div>
 			<label for="verfication-code" class="form-label">Verification Code</label>
 			<input type="text" name="verification-code" value="{{ .Code }}"
