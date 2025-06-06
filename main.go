@@ -162,6 +162,12 @@ func main() {
 		SuccessRedirectURL: "/account",
 		ErrorRedirectURL:   "/account",
 	})
+	mux.Handle("/account/change-password", &AccountChangePasswordHandler{
+		Log:               log,
+		SessionStore:      sessionStore,
+		LocalAccountStore: store,
+		SuccessRedirect:   "/account",
+	})
 	mux.Handle("/shelter", &ListManagedShelterHandler{
 		Log:                  log,
 		SessionStore:         sessionStore,

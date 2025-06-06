@@ -111,43 +111,6 @@ func (c *PGStore) CreateForeignAccount(ctx context.Context, data NewForeignAccou
 	return foreignAccount, user, nil
 }
 
-func (p *PGStore) GetForeignAccount(ctx context.Context, provider, providerID string) (*ForeignAccount, *User, error) {
-	var userID string
-	account := &ForeignAccount{}
-	row := p.DB.QueryRowContext(ctx,
-		`SELECT user_id, provider, provider_id, created_at
-		 FROM foreign_accounts
-		 WHERE provider = $1 AND provider_id = $2`,
-		provider, providerID,
-	)
-	err := row.Scan(&userID, &account.Provider, &account.ProviderID, &account.CreatedAt)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, ErrNoAccount
-		}
-		return nil, nil, fmt.Errorf("failed to query foreign accounts table: %w", err)
-	}
-
-	user := &User{}
-	row = p.DB.QueryRowContext(ctx,
-		`SELECT
-			user_id, name, email, avatar,
-			created_at, updated_at
-		 FROM users
-		 WHERE user_id = $1`,
-		userID,
-	)
-	err = row.Scan(
-		&user.ID, &user.Name, &user.Email, &user.Avatar,
-		&user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to query users table: %w", err)
-	}
-
-	return account, user, nil
-}
-
 func (p *PGStore) GetLocalAccount(ctx context.Context, email string) (*LocalAccount, *User, error) {
 	user := &User{}
 	row := p.DB.QueryRowContext(ctx,
@@ -183,6 +146,65 @@ func (p *PGStore) GetLocalAccount(ctx context.Context, email string) (*LocalAcco
 			return nil, nil, ErrNoAccount
 		}
 		return nil, nil, fmt.Errorf("unable to query local_accounts table: %w", err)
+	}
+
+	return account, user, nil
+}
+
+func (p *PGStore) UpdateLocalAccountPassword(ctx context.Context, accountID string, passwordHash []byte) (*LocalAccount, error) {
+	row := p.DB.QueryRowContext(ctx,
+		`UPDATE local_accounts SET password_hash = $1, updated_at = now()
+		 WHERE local_account_id = $2
+		 RETURNING 
+			local_account_id, password_hash, updated_at, created_at`,
+		passwordHash, accountID,
+	)
+
+	account := &LocalAccount{}
+	err := row.Scan(&account.ID, &account.PasswordHash, &account.UpdatedAt, &account.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoAccount
+		}
+
+		return nil, fmt.Errorf("failed to update local_account password: %w", err)
+	}
+
+	return account, nil
+}
+
+func (p *PGStore) GetForeignAccount(ctx context.Context, provider, providerID string) (*ForeignAccount, *User, error) {
+	var userID string
+	account := &ForeignAccount{}
+	row := p.DB.QueryRowContext(ctx,
+		`SELECT user_id, provider, provider_id, created_at
+		 FROM foreign_accounts
+		 WHERE provider = $1 AND provider_id = $2`,
+		provider, providerID,
+	)
+	err := row.Scan(&userID, &account.Provider, &account.ProviderID, &account.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, ErrNoAccount
+		}
+		return nil, nil, fmt.Errorf("failed to query foreign accounts table: %w", err)
+	}
+
+	user := &User{}
+	row = p.DB.QueryRowContext(ctx,
+		`SELECT
+			user_id, name, email, avatar,
+			created_at, updated_at
+		 FROM users
+		 WHERE user_id = $1`,
+		userID,
+	)
+	err = row.Scan(
+		&user.ID, &user.Name, &user.Email, &user.Avatar,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to query users table: %w", err)
 	}
 
 	return account, user, nil

@@ -1373,3 +1373,193 @@ func (a *AccountChangeEmailVerificationHandler) renderPage(w http.ResponseWriter
 		return
 	}
 }
+
+type AccountChangePasswordHandler struct {
+	Log               *slog.Logger
+	SessionStore      *CookieSessionStore
+	LocalAccountStore interface {
+		localAccountGetter
+		localAccountPasswordUpdater
+	}
+	SuccessRedirect string
+}
+
+type localAccountPasswordUpdater interface {
+	UpdateLocalAccountPassword(ctx context.Context, userID string, passwordHash []byte) (*LocalAccount, error)
+}
+
+type accountChangePasswordPageData struct {
+	basePageData
+	Flash       *flash
+	FieldValues accountChangePasswordFieldValues
+	FieldErrors accountChangePasswordFieldErrors
+}
+
+type accountChangePasswordFieldValues struct {
+	CurrentPassword    string
+	NewPassword        string
+	ConfirmNewPassword string
+}
+
+type accountChangePasswordFieldErrors struct {
+	CurrentPassword    string
+	NewPassword        string
+	ConfirmNewPassword string
+}
+
+var accountChangePasswordPage = template.Must(template.ParseFS(embedFS, "templates/pages/account/change_password.html", "templates/pages/base.html"))
+
+func (a *AccountChangePasswordHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	a.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+	if loginSessionData == nil {
+		a.Log.Debug("Unauthorized. User is not logged in.")
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized. Please login first.",
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		fieldValues := accountChangePasswordFieldValues{
+			CurrentPassword:    r.FormValue("current-password"),
+			NewPassword:        r.FormValue("new-password"),
+			ConfirmNewPassword: r.FormValue("confirm-new-password"),
+		}
+
+		valid, fieldErrors := a.validate(fieldValues)
+		if !valid {
+			a.Log.Debug("Field values validation failed.", "field_errors", fieldErrors)
+			a.renderPage(w, http.StatusUnprocessableEntity, accountChangePasswordPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				FieldValues: fieldValues,
+				FieldErrors: fieldErrors,
+			})
+			return
+		}
+
+		localAccount, _, err := a.LocalAccountStore.GetLocalAccount(r.Context(), loginSessionData.Email)
+		if err != nil {
+			if errors.Is(err, ErrNoAccount) {
+				a.Log.Debug("User doesn't have a local account registered.")
+				a.renderPage(w, http.StatusNotFound, accountChangePasswordPageData{
+					basePageData: basePageData{
+						LoginSession: loginSessionData,
+					},
+					Flash:       newFlash(flashLevelError, "User doesn't have a local account registered."),
+					FieldValues: fieldValues,
+				})
+				return
+			}
+
+			a.Log.Error("Unable to query local account.", "error", err.Error())
+			a.renderPage(w, http.StatusInternalServerError, accountChangePasswordPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Flash:       newFlash(flashLevelError, clientMessageUnexpectedError),
+				FieldValues: fieldValues,
+			})
+			return
+		}
+
+		err = bcrypt.CompareHashAndPassword(localAccount.PasswordHash, []byte(fieldValues.CurrentPassword))
+		if err != nil {
+			a.Log.Debug("Password hash comparison failed.", "error", err.Error())
+			a.renderPage(w, http.StatusUnauthorized, accountChangePasswordPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				FieldValues: fieldValues,
+				FieldErrors: accountChangePasswordFieldErrors{
+					CurrentPassword: "Password incorrect",
+				},
+			})
+			return
+		}
+
+		passwordHash, err := bcrypt.GenerateFromPassword([]byte(fieldValues.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			a.Log.Error("Unable to generate hash from new password.", "error", err.Error())
+			a.renderPage(w, http.StatusUnauthorized, accountChangePasswordPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Flash:       newFlash(flashLevelError, clientMessageUnexpectedError),
+				FieldValues: fieldValues,
+			})
+			return
+		}
+
+		_, err = a.LocalAccountStore.UpdateLocalAccountPassword(r.Context(), localAccount.ID, passwordHash)
+		if err != nil {
+			a.Log.Error("Unable to update local account password.", "error", err.Error(), "local_account_id", localAccount.ID)
+			a.renderPage(w, http.StatusInternalServerError, accountChangePasswordPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Flash:       newFlash(flashLevelError, clientMessageUnexpectedError),
+				FieldValues: fieldValues,
+			})
+			return
+		}
+
+		a.Log.Debug("Account changed password successfully.", "account_id", localAccount.ID)
+
+		flashData := newFlash(flashLevelSuccess, "Successfully changed password.")
+		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+		http.Redirect(w, r, a.SuccessRedirect, http.StatusSeeOther)
+		return
+	}
+
+	a.renderPage(w, http.StatusOK, accountChangePasswordPageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+	})
+}
+
+func (a *AccountChangePasswordHandler) renderPage(w http.ResponseWriter, status int, data accountChangePasswordPageData) {
+	err := RenderPage(w, accountChangePasswordPage, status, data)
+	if err != nil {
+		a.Log.Error("Unable to render page.", "reason", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: data.basePageData,
+			Status:       http.StatusInternalServerError,
+			Message:      clientMessageUnexpectedError,
+		})
+		return
+	}
+}
+
+func (a *AccountChangePasswordHandler) validate(fieldValues accountChangePasswordFieldValues) (valid bool, fieldErrors accountChangePasswordFieldErrors) {
+	if l := len(fieldValues.CurrentPassword); l == 0 {
+		fieldErrors.CurrentPassword = "Please fill out this field."
+	}
+
+	if l := len(fieldValues.NewPassword); l == 0 {
+		fieldErrors.NewPassword = "Please fill out this field."
+	} else if l < 8 {
+		fieldErrors.NewPassword = "Value is too short. It must be at least 8 characters long."
+	} else if l > 32 {
+		fieldErrors.NewPassword = "Value is too long. It must not exceed 32 characters long."
+	}
+
+	if fieldValues.ConfirmNewPassword == "" {
+		fieldErrors.ConfirmNewPassword = "Please fill out this field."
+	} else if fieldValues.ConfirmNewPassword != fieldValues.NewPassword {
+		fieldErrors.ConfirmNewPassword = "New password doesn't match."
+	}
+
+	if fieldErrors.CurrentPassword != "" ||
+		fieldErrors.NewPassword != "" ||
+		fieldErrors.ConfirmNewPassword != "" {
+
+		return false, fieldErrors
+	}
+
+	return true, accountChangePasswordFieldErrors{}
+}
