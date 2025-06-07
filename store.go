@@ -315,6 +315,39 @@ func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelte
 	return result, nil
 }
 
+func (p *PGStore) GetShelterWithRole(ctx context.Context, userID, shelterID string) (*Shelter, ShelterRole, error) {
+	row := p.DB.QueryRowContext(ctx,
+		`SELECT
+			s.shelter_id, s.name, s.avatar, s.address, 
+			ST_Y(s.coordinates), ST_X(s.coordinates), s.description, s.created_at,
+			s.updated_at, r.role
+		 FROM shelters s
+		 LEFT JOIN shelter_roles r ON s.shelter_id = r.shelter_id AND r.user_id = $1
+		 WHERE s.shelter_id = $2`,
+		userID, shelterID,
+	)
+
+	var result struct {
+		Shelter
+		Role sql.NullString
+	}
+	err := row.Scan(
+		&result.ID, &result.Name, &result.Avatar, &result.Address,
+		&result.Coordinates.Latitude, &result.Coordinates.Longtude, &result.Description,
+		&result.CreatedAt, &result.UpdatedAt,
+		&result.Role,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ShelterNoRole, ErrNoShelter
+		}
+
+		return nil, ShelterNoRole, fmt.Errorf("unable to query shelters table: %w", err)
+	}
+
+	return &result.Shelter, ShelterRole(result.Role.String), nil
+}
+
 func (p *PGStore) FindManagedShelter(ctx context.Context, userID string) ([]*ManagedShelterResult, error) {
 	rows, err := p.DB.QueryContext(ctx,
 		`SELECT

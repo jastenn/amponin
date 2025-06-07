@@ -26,7 +26,7 @@ func (s ShelterRole) String() string {
 		return "Admin"
 	case ShelterRoleEditor:
 		return "Editor"
-	case "":
+	case ShelterNoRole:
 		return ""
 	default:
 		panic("invalid shelter role")
@@ -34,6 +34,7 @@ func (s ShelterRole) String() string {
 }
 
 const (
+	ShelterNoRole         ShelterRole = ""
 	ShelterRoleSuperAdmin ShelterRole = "super_admin"
 	ShelterRoleAdmin      ShelterRole = "admin"
 	ShelterRoleEditor     ShelterRole = "editor"
@@ -398,6 +399,92 @@ func (l *ListManagedShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	})
 	if err != nil {
 		l.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+}
+
+type ShelterSettingsHandler struct {
+	Log             *slog.Logger
+	SessionStore    *CookieSessionStore
+	NotFoundHandler http.Handler
+	ShelterGetter   shelterGetterWithRole
+}
+
+type shelterGetterWithRole interface {
+	GetShelterWithRole(ctx context.Context, userID, shelterID string) (*Shelter, ShelterRole, error)
+}
+
+type shelterSettingsPageData struct {
+	basePageData
+	ShelterName string
+	ShelterID   string
+	Role        ShelterRole
+}
+
+var shelterSettingsPage = template.Must(template.ParseFS(embedFS, "templates/pages/shelter/settings.html", "templates/pages/base.html"))
+
+func (s *ShelterSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	s.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+
+	if loginSessionData == nil {
+		s.Log.Debug("Unauthorized. User is not logged in.")
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized. Please login first.",
+		})
+		return
+	}
+
+	shelterID := r.PathValue("shelter_id")
+	shelter, role, err := s.ShelterGetter.GetShelterWithRole(r.Context(), loginSessionData.UserID, shelterID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelter) {
+			s.Log.Debug("Shelter doesn't exists.", "shelter_id", shelterID)
+			s.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+
+		s.Log.Error("Unable to get shelter by id.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+
+	if role == ShelterNoRole {
+		s.Log.Debug("Unauthorized. User doesn't manage this shelter.", "shelter_id", shelterID, "user_id", loginSessionData.UserID)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized.",
+		})
+		return
+	}
+
+	err = RenderPage(w, shelterSettingsPage, http.StatusOK, shelterSettingsPageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		ShelterName: shelter.Name,
+		ShelterID:   shelter.ID,
+		Role:        role,
+	})
+	if err != nil {
+		s.Log.Error("Unable to render page.", "error", err.Error())
 		renderErrorPage(w, errorPageData{
 			basePageData: basePageData{
 				LoginSession: loginSessionData,

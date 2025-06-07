@@ -1,0 +1,24 @@
+.shelter-settings {
+	gap: .75rem;
+}
+
+.shelter-settings-section {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1.5rem;
+}
+
+.shelter-settings-section__action {
+	min-width: 6rem;
+}
+
+.shelter-settings-section__heading {
+	text-transform: uppercase;
+	font-size: 1rem;
+	margin: 0;
+}
+
+.shelter-settings-section__details {
+	margin: 0;
+}

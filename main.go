@@ -186,6 +186,12 @@ func main() {
 		ShelterRoleGetter: store,
 		NotFoundHandler:   notFoundHandler,
 	})
+	mux.Handle("/shelter/{shelter_id}/settings", &ShelterSettingsHandler{
+		Log:             log,
+		SessionStore:    sessionStore,
+		NotFoundHandler: notFoundHandler,
+		ShelterGetter:   store,
+	})
 	mux.Handle("/shelter/{shelter_id}/post", &PostPetHandler{
 		Log:               log,
 		SessionStore:      sessionStore,
