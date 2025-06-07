@@ -16,7 +16,7 @@
 	<div class="shelter-thumbnail-list">
 		{{ range .Shelters }}
 			<div class="shelter-thumbnail">
-				<img src="{{ with .AvatarURL -}} {{ . }} {{- else -}} /static/default-shelter-avatar.png {{- end }}" alt="" class="shelter-thumbnail__avatar">
+				<img src="{{ with .Avatar -}} {{ .URL }} {{- else -}} /static/default-shelter-avatar.png {{- end }}" alt="" class="shelter-thumbnail__avatar">
 				<div class="shelter-thumbnail__details">
 					<p class="shelter-thumbnail__role">{{ .Role }}</p>
 					<a class="shelter-thumbnail__name" href="/shelter/{{ .ID }}">{{ .Name }}</a>

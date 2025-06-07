@@ -298,21 +298,24 @@ func (g *GetShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	role, err := g.ShelterRoleGetter.GetShelterRole(r.Context(), shelterID, loginSessionData.UserID)
-	if err != nil && !errors.Is(err, ErrNoShelterRole) {
-		g.Log.Error(
-			"Unexpected error while getting shelter role.",
-			"shelter_id", shelterID,
-			"user_id", loginSessionData.UserID,
-		)
-		renderErrorPage(w, errorPageData{
-			basePageData: basePageData{
-				LoginSession: loginSessionData,
-			},
-			Status:  http.StatusInternalServerError,
-			Message: clientMessageUnexpectedError,
-		})
-		return
+	var role ShelterRole
+	if loginSessionData != nil {
+		role, err = g.ShelterRoleGetter.GetShelterRole(r.Context(), shelterID, loginSessionData.UserID)
+		if err != nil && !errors.Is(err, ErrNoShelterRole) {
+			g.Log.Error(
+				"Unexpected error while getting shelter role.",
+				"shelter_id", shelterID,
+				"user_id", loginSessionData.UserID,
+			)
+			renderErrorPage(w, errorPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Status:  http.StatusInternalServerError,
+				Message: clientMessageUnexpectedError,
+			})
+			return
+		}
 	}
 
 	var flashData *flash
