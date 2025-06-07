@@ -174,14 +174,16 @@ func main() {
 		ManagedShelterFinder: store,
 	})
 	mux.Handle("/shelter/register", &RegisterShelterHandler{
-		Log:             log,
-		SessionStore:    sessionStore,
-		ShelterRegistry: store,
+		Log:                log,
+		SessionStore:       sessionStore,
+		ShelterRegistry:    store,
+		SuccessRedirectURL: "/shelter/{shelter_id}",
 	})
 	mux.Handle("/shelter/{shelter_id}", &GetShelterByIDHandler{
 		Log:               log,
 		SessionStore:      sessionStore,
 		ShelterGetterByID: store,
+		ShelterRoleGetter: store,
 		NotFoundHandler:   notFoundHandler,
 	})
 	mux.Handle("/shelter/{shelter_id}/post", &PostPetHandler{

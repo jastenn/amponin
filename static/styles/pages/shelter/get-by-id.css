@@ -5,9 +5,20 @@
 }
 
 .shelter-page__profile {
+	display: flex;
+	flex-direction: column;
+	gap: .5rem;
 	flex-basis: 20rem;
 	flex-shrink: 0;
 	flex-grow: 1;
+}
+
+.shelter-page__profile > * {
+	margin: 0;
+}
+
+.shelter-page__action {
+	width: 100%;
 }
 
 .shelter-page__profile-header {

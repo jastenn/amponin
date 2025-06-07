@@ -3,11 +3,22 @@
 	<link rel="stylesheet" href="/static/styles/pages/shelter/get-by-id.css">
 {{ end }}
 
+{{ define "header-beforeend" }}
+	{{ with .Flash }}
+		<div class="notification-bar {{ if eq .Level `success` -}} notification-bar--success
+			{{ else if eq .Level `warn` }} notification-bar--warn
+			{{ else if eq .Level `error` }} notification-bar--error {{ end }}"
+		>
+			{{ .Message }}
+		</div>
+	{{ end }}
+{{ end }}
+
 {{ define "content" }}
 <div class="shelter-page">
 	<div class="shelter-page__profile">
 		<div class="shelter-page__profile-header">
-			<img src="{{ with .AvatarURL -}} {{- . -}} {{- else -}} /static/default-shelter-avatar.png {{- end }}" alt="{{ .Name }}'s Avatar"
+			<img src="{{ with .Avatar -}} {{- .URL -}} {{- else -}} /static/default-shelter-avatar.png {{- end }}" alt="{{ .Name }}'s Avatar"
 				class="shelter-page__avatar">
 			<h1 class="shelter-page__name">{{ .Name }}</h1>
 		</div>	
@@ -17,6 +28,21 @@
 			</svg>
 			 {{ .Address }}
 		</p>
+		{{ if or (eq .Role "super_admin") (eq .Role "admin") (eq .Role "editor") }}
+			<a href="#" class="button button--outline button--with-icon button--small-icon shelter-page__action">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="button__icon">
+					<path fill-rule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.992 6.992 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clip-rule="evenodd" />
+				</svg>
+				<span>Settings</span>
+			</a>
+			<a href="/shelter/{{ .Shelter.ID }}/post" class="button button--with-icon button--small-icon shelter-page__action">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="button__icon">
+					<path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474Z" />
+					<path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9A.75.75 0 0 1 14 9v2.25A2.75 2.75 0 0 1 11.25 14h-6.5A2.75 2.75 0 0 1 2 11.25v-6.5A2.75 2.75 0 0 1 4.75 2H7a.75.75 0 0 1 0 1.5H4.75Z" />
+				</svg>
+				<span>Post Pet</span>
+			</a>
+		{{ end }}
 	</div>
 	<div class="shelter-page__description">
 		<p>{{ .Description }}</p>

@@ -87,6 +87,9 @@ type RegisterShelterHandler struct {
 	Log             *slog.Logger
 	SessionStore    *CookieSessionStore
 	ShelterRegistry ShelterRegistry
+	// SuccessRedirectURL is a url when registration is successful.
+	// Pattern {shelter_id} is substitude
+	SuccessRedirectURL string
 }
 
 type NewShelter struct {
@@ -179,12 +182,12 @@ func (rh *RegisterShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		}
 
 		rh.Log.Info("New shelter was created.", "shelter_id", shelter.ID, "user_id", loginSessionData.UserID)
-		rh.renderPage(w, http.StatusOK, registerShelterPageData{
-			basePageData: basePageData{
-				LoginSession: loginSessionData,
-			},
-			Flash: newFlash(flashLevelSuccess, "Successfully registered a new shelter."),
-		})
+
+		flashData := newFlash(flashLevelSuccess, "Successfully registered a new shelter.")
+		rh.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		redirectURL := strings.ReplaceAll(rh.SuccessRedirectURL, "{shelter_id}", shelter.ID)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 		return
 	}
 
@@ -255,6 +258,7 @@ type GetShelterByIDHandler struct {
 	Log               *slog.Logger
 	SessionStore      *CookieSessionStore
 	ShelterGetterByID shelterGetterByID
+	ShelterRoleGetter shelterRoleGetter
 	NotFoundHandler   http.Handler
 }
 
@@ -264,6 +268,8 @@ type shelterGetterByID interface {
 
 type shelterByIDPageData struct {
 	basePageData
+	Flash *flash
+	Role  ShelterRole
 	Shelter
 }
 
@@ -292,10 +298,31 @@ func (g *GetShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	role, err := g.ShelterRoleGetter.GetShelterRole(r.Context(), shelterID, loginSessionData.UserID)
+	if err != nil && !errors.Is(err, ErrNoShelterRole) {
+		g.Log.Error(
+			"Unexpected error while getting shelter role.",
+			"shelter_id", shelterID,
+			"user_id", loginSessionData.UserID,
+		)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+
+	var flashData *flash
+	g.SessionStore.Decode(r, sessionKeyFlash, &flashData)
 	err = RenderPage(w, getShelterByIDPage, http.StatusOK, shelterByIDPageData{
 		basePageData: basePageData{
 			LoginSession: loginSessionData,
 		},
+		Role:    role,
+		Flash:   flashData,
 		Shelter: *shelter,
 	})
 	if err != nil {
