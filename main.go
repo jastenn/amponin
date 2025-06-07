@@ -199,6 +199,14 @@ func main() {
 		PetRegistry:       store,
 		ImageStore:        imageStore,
 	})
+	mux.Handle("/shelter/{shelter_id}/update-info", &ShelterUpdateInfoHandler{
+		Log:                log,
+		SessionStore:       sessionStore,
+		NotFoundHandler:    notFoundHandler,
+		ShelterStore:       store,
+		ImageStore:         imageStore,
+		SuccessRedirectURL: "/shelter/{shelter_id}",
+	})
 	mux.Handle("/pet/{pet_id}", &PetByIDHandler{
 		Log:             log,
 		SessionStore:    sessionStore,

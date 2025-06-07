@@ -315,7 +315,7 @@ func (p *PGStore) GetShelterByID(ctx context.Context, shelterID string) (*Shelte
 	return result, nil
 }
 
-func (p *PGStore) GetShelterWithRole(ctx context.Context, userID, shelterID string) (*Shelter, ShelterRole, error) {
+func (p *PGStore) GetShelterWithRole(ctx context.Context, shelterID, userID string) (*Shelter, ShelterRole, error) {
 	row := p.DB.QueryRowContext(ctx,
 		`SELECT
 			s.shelter_id, s.name, s.avatar, s.address, 
@@ -346,6 +346,49 @@ func (p *PGStore) GetShelterWithRole(ctx context.Context, userID, shelterID stri
 	}
 
 	return &result.Shelter, ShelterRole(result.Role.String), nil
+}
+
+func (p *PGStore) UpdateShelter(ctx context.Context, shelterID string, data UpdateShelterData) (*Shelter, error) {
+	var longitude *float64
+	var latitude *float64
+	if data.Coordinates != nil {
+		latitude = &data.Coordinates.Latitude
+		longitude = &data.Coordinates.Longtude
+	}
+
+	row := p.DB.QueryRowContext(ctx,
+		`UPDATE shelters SET
+			name = COALESCE($1, name),
+			avatar = COALESCE($2, avatar),
+			address = COALESCE($3, address),
+			coordinates = COALESCE(ST_SETSRID(ST_MAKEPOINT($4, $5), 4326), coordinates),
+			description = COALESCE($6, description),
+			updated_at = now()
+		 WHERE shelter_id = $7
+		 RETURNING
+			shelter_id, name, avatar, address,
+			ST_X(coordinates), ST_Y(coordinates), description, created_at,
+			updated_at`,
+		data.Name, data.Avatar, data.Address,
+		longitude, latitude, data.Description,
+		shelterID,
+	)
+
+	shelter := &Shelter{}
+	err := row.Scan(
+		&shelter.ID, &shelter.Name, &shelter.Avatar, &shelter.Address,
+		&shelter.Coordinates.Longtude, &shelter.Coordinates.Latitude, &shelter.Description, &shelter.CreatedAt,
+		&shelter.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoShelter
+		}
+
+		return nil, fmt.Errorf("unable to update shelters table: %w", err)
+	}
+
+	return shelter, nil
 }
 
 func (p *PGStore) FindManagedShelter(ctx context.Context, userID string) ([]*ManagedShelterResult, error) {

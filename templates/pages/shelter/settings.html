@@ -15,7 +15,7 @@
 				<h2 class="shelter-settings-section__heading">Information</h2>
 				<p class="shelter-settings-section__details">Manage your shelter's public information.</p>
 			</div>
-			<a href="#" class="shelter-settings-section__action button button--secondary">Edit</a>
+			<a href="/shelter/{{ .ShelterID }}/update-info" class="shelter-settings-section__action button button--secondary">Update</a>
 		</div>
 
 		{{ if or (eq .Role "super_admin") (eq .Role "admin") }}
@@ -34,7 +34,7 @@
 					<h2 class="shelter-settings-section__heading">Tranfer Ownership</h2>
 					<p class="shelter-settings-section__details">Transfer ownership to a new owner.</p>
 				</div>
-				<a href="#" class="shelter-settings-section__action button button--secondary">Edit</a>
+				<a href="#" class="shelter-settings-section__action button button--secondary">Transfer</a>
 			</div>
 		{{ end }}
 

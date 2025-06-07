@@ -245,6 +245,18 @@ textarea.form-control--invalid {
 	color: var(--color-error);
 }
 
+.avatar-input {
+	display: flex;
+	align-items: center;
+	gap: .5rem;
+}
+
+.avatar-input__preview {
+	width: 3rem;
+	height: 3rem;
+	border-radius: 9999px;
+}
+
 .images-input {
 	font-size: .875rem;
 	background-color: var(--color-secondary);

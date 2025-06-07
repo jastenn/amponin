@@ -62,6 +62,10 @@ type Coordinates struct {
 	Longtude float64
 }
 
+func (c Coordinates) String() string {
+	return fmt.Sprintf("%v %v", c.Latitude, c.Longtude)
+}
+
 func ParseCoordinates(s string) (*Coordinates, error) {
 	values := strings.Split(s, " ")
 	if len(values) != 2 {
@@ -107,22 +111,65 @@ type ShelterRegistry interface {
 type registerShelterPageData struct {
 	basePageData
 	Flash       *flash
-	FieldValues registerShelterValues
-	FieldErrors registerShelterErrors
+	FieldValues shelterFormValues
+	FieldErrors shelterFormErrors
 }
 
-type registerShelterValues struct {
+type shelterFormValues struct {
 	Name        string
+	Avatar      *multipart.FileHeader
 	Address     string
 	Coordinates string
 	Description string
 }
 
-type registerShelterErrors struct {
+type shelterFormErrors struct {
 	Name        string
+	Avatar      string
 	Address     string
 	Coordinates string
 	Description string
+}
+
+func validateShelterFormValues(fieldValues shelterFormValues) (valid bool, fieldErrors shelterFormErrors) {
+	if l := len(strings.TrimSpace(fieldValues.Name)); l == 0 {
+		fieldErrors.Name = "Please fill out this field."
+	} else if l < 8 {
+		fieldErrors.Name = "Value must be at least 8 characters long."
+	} else if l > 50 {
+		fieldErrors.Name = "Value must not exceed 50 characters long."
+	}
+
+	if l := len(strings.TrimSpace(fieldValues.Address)); l == 0 {
+		fieldErrors.Address = "Please fill out this field."
+	} else if l < 8 {
+		fieldErrors.Address = "Value is too short. Please include more information."
+	} else if l > 120 {
+		fieldErrors.Address = "Value must not exceed 120 characters long."
+	}
+
+	if fieldValues.Coordinates == "" {
+		fieldErrors.Coordinates = "Please fill out this field."
+	} else if _, err := ParseCoordinates(fieldValues.Coordinates); err != nil {
+		fieldErrors.Coordinates = "Value is invalid coordinates."
+	}
+
+	if l := len(strings.TrimSpace(fieldValues.Description)); l == 0 {
+		fieldErrors.Description = "Please fill out this field."
+	} else if l < 150 {
+		fieldErrors.Description = "Value must be at least 150 characters long."
+	} else if l > 2500 {
+		fieldErrors.Description = "Value must not exceed 2500 characters long."
+	}
+
+	valid = fieldErrors.Name == "" &&
+		fieldErrors.Avatar == "" &&
+		fieldErrors.Address == "" &&
+		fieldErrors.Coordinates == "" &&
+		fieldErrors.Description == ""
+
+	return valid, fieldErrors
+
 }
 
 var registerShelterPage = template.Must(template.ParseFS(embedFS, "templates/pages/shelter/register.html", "templates/pages/base.html"))
@@ -142,14 +189,14 @@ func (rh *RegisterShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 
 	if r.Method == http.MethodPost {
-		fieldValues := registerShelterValues{
+		fieldValues := shelterFormValues{
 			Name:        r.FormValue("name"),
 			Address:     r.FormValue("address"),
 			Coordinates: r.FormValue("coordinates"),
 			Description: r.FormValue("description"),
 		}
 
-		fieldErrors, valid := rh.validate(fieldValues)
+		valid, fieldErrors := validateShelterFormValues(fieldValues)
 		if !valid {
 			rh.renderPage(w, http.StatusOK, registerShelterPageData{
 				basePageData: basePageData{
@@ -200,50 +247,8 @@ func (rh *RegisterShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-func (rh *RegisterShelterHandler) validate(fieldValues registerShelterValues) (fieldErrors registerShelterErrors, valid bool) {
-	if l := len(strings.TrimSpace(fieldValues.Name)); l == 0 {
-		fieldErrors.Name = "Please fill out this field."
-	} else if l < 8 {
-		fieldErrors.Name = "Value must be at least 8 characters long."
-	} else if l > 50 {
-		fieldErrors.Name = "Value must not exceed 50 characters long."
-	}
-
-	if l := len(strings.TrimSpace(fieldValues.Address)); l == 0 {
-		fieldErrors.Address = "Please fill out this field."
-	} else if l < 8 {
-		fieldErrors.Address = "Value is too short. Please include more information."
-	} else if l > 120 {
-		fieldErrors.Address = "Value must not exceed 120 characters long."
-	}
-
-	if fieldValues.Coordinates == "" {
-		fieldErrors.Coordinates = "Please fill out this field."
-	} else if _, err := ParseCoordinates(fieldValues.Coordinates); err != nil {
-		fieldErrors.Coordinates = "Value is invalid coordinates."
-	}
-
-	if l := len(strings.TrimSpace(fieldValues.Description)); l == 0 {
-		fieldErrors.Description = "Please fill out this field."
-	} else if l < 150 {
-		fieldErrors.Description = "Value must be at least 150 characters long."
-	} else if l > 2500 {
-		fieldErrors.Description = "Value must not exceed 2500 characters long."
-	}
-
-	if fieldErrors.Name != "" ||
-		fieldErrors.Address != "" ||
-		fieldErrors.Coordinates != "" ||
-		fieldErrors.Description != "" {
-
-		return fieldErrors, false
-	}
-
-	return registerShelterErrors{}, true
-}
-
 func (rh *RegisterShelterHandler) renderPage(w http.ResponseWriter, status int, data registerShelterPageData) {
-	err := RenderPage(w, registerShelterPage, http.StatusOK, data)
+	err := RenderPage(w, registerShelterPage, status, data)
 	if err != nil {
 		rh.Log.Error("Unexpected error while rendering page.", "error", err.Error())
 		renderErrorPage(w, errorPageData{
@@ -258,12 +263,12 @@ func (rh *RegisterShelterHandler) renderPage(w http.ResponseWriter, status int, 
 type GetShelterByIDHandler struct {
 	Log               *slog.Logger
 	SessionStore      *CookieSessionStore
-	ShelterGetterByID shelterGetterByID
+	ShelterGetterByID shelterGetter
 	ShelterRoleGetter shelterRoleGetter
 	NotFoundHandler   http.Handler
 }
 
-type shelterGetterByID interface {
+type shelterGetter interface {
 	GetShelterByID(ctx context.Context, id string) (*Shelter, error)
 }
 
@@ -418,7 +423,7 @@ type ShelterSettingsHandler struct {
 }
 
 type shelterGetterWithRole interface {
-	GetShelterWithRole(ctx context.Context, userID, shelterID string) (*Shelter, ShelterRole, error)
+	GetShelterWithRole(ctx context.Context, shelterID, userID string) (*Shelter, ShelterRole, error)
 }
 
 type shelterSettingsPageData struct {
@@ -444,7 +449,7 @@ func (s *ShelterSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	shelterID := r.PathValue("shelter_id")
-	shelter, role, err := s.ShelterGetter.GetShelterWithRole(r.Context(), loginSessionData.UserID, shelterID)
+	shelter, role, err := s.ShelterGetter.GetShelterWithRole(r.Context(), shelterID, loginSessionData.UserID)
 	if err != nil {
 		if errors.Is(err, ErrNoShelter) {
 			s.Log.Debug("Shelter doesn't exists.", "shelter_id", shelterID)
@@ -491,6 +496,215 @@ func (s *ShelterSettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 			},
 			Status:  http.StatusInternalServerError,
 			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+}
+
+type ShelterUpdateInfoHandler struct {
+	Log             *slog.Logger
+	SessionStore    *CookieSessionStore
+	NotFoundHandler http.Handler
+	ImageStore      *LocalImageStore
+	ShelterStore    interface {
+		shelterGetterWithRole
+		shelterUpdater
+	}
+	SuccessRedirectURL string
+}
+
+type shelterUpdater interface {
+	UpdateShelter(ctx context.Context, shelterID string, data UpdateShelterData) (*Shelter, error)
+}
+
+type UpdateShelterData struct {
+	Name        *string
+	Avatar      *Image
+	Address     *string
+	Coordinates *Coordinates
+	Description *string
+}
+
+type shelterUpdateInfoPageData struct {
+	basePageData
+	Shelter     *Shelter
+	FieldValues shelterFormValues
+	FieldErrors shelterFormErrors
+	Flash       *flash
+}
+
+var shelterUpdateInfoPage = template.Must(template.ParseFS(embedFS, "templates/pages/shelter/update_info.html", "templates/pages/base.html"))
+
+func (e *ShelterUpdateInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	e.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+
+	if loginSessionData == nil {
+		e.Log.Debug("Unauthorized. User is not logged in.")
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized. Please login first",
+		})
+		return
+	}
+
+	shelterID := r.PathValue("shelter_id")
+
+	shelter, role, err := e.ShelterStore.GetShelterWithRole(r.Context(), shelterID, loginSessionData.UserID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelter) {
+			e.Log.Debug("Shelter not found.", "shelter_id", shelterID)
+			e.NotFoundHandler.ServeHTTP(w, r)
+			return
+		}
+
+		e.Log.Error("Unable to get shelter role.", "shelter_id", shelterID, "user_id", loginSessionData.UserID)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+
+	allowedRoles := []ShelterRole{ShelterRoleSuperAdmin, ShelterRoleAdmin, ShelterRoleEditor}
+	if errors.Is(err, ErrNoShelterRole) || !slices.Contains(allowedRoles, role) {
+		e.Log.Debug("User is not authorized to perform action for this shelter.", "shelter_id", shelterID, "user_id", loginSessionData.UserID, "role", role)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized.",
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		err := r.ParseMultipartForm(10_000_000)
+		if err != nil {
+			e.Log.Error("Unable to parse form as multipart", "error", err.Error())
+			e.renderPage(w, http.StatusInternalServerError, shelterUpdateInfoPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Shelter: shelter,
+				Flash:   newFlash(flashLevelError, clientMessageUnexpectedError),
+			})
+			return
+		}
+
+		fieldValues := shelterFormValues{
+			Name:        r.FormValue("name"),
+			Address:     r.FormValue("address"),
+			Coordinates: r.FormValue("coordinates"),
+			Description: r.FormValue("description"),
+		}
+
+		_, fieldValues.Avatar, err = r.FormFile("avatar")
+		if err != nil && !errors.Is(err, http.ErrMissingFile) {
+			e.Log.Error("Unable to parse avatar field.", "error", err.Error())
+			e.renderPage(w, http.StatusInternalServerError, shelterUpdateInfoPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Shelter:     shelter,
+				FieldValues: fieldValues,
+				Flash:       newFlash(flashLevelError, clientMessageUnexpectedError),
+			})
+			return
+		}
+
+		valid, fieldErrors := validateShelterFormValues(fieldValues)
+		if !valid {
+			e.Log.Debug("Field values validation failed.", "field_values", fieldValues, "field_errors", fieldErrors)
+			e.renderPage(w, http.StatusUnprocessableEntity, shelterUpdateInfoPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Shelter:     shelter,
+				FieldValues: fieldValues,
+				FieldErrors: fieldErrors,
+			})
+			return
+		}
+
+		var avatar *Image
+		if fieldValues.Avatar != nil {
+			var err error
+			avatar, err = e.ImageStore.Store(fieldValues.Avatar)
+			if err != nil {
+				e.Log.Debug("Unable to store avatar.", "error", err.Error())
+				fieldErrors.Avatar = "Unable to upload avatar."
+				e.renderPage(w, http.StatusInternalServerError, shelterUpdateInfoPageData{
+					basePageData: basePageData{
+						LoginSession: loginSessionData,
+					},
+					FieldErrors: fieldErrors,
+				})
+				return
+			}
+		}
+
+		coordinates, err := ParseCoordinates(fieldValues.Coordinates)
+		if err != nil {
+			panic(fmt.Errorf("unable to parse coordinates: %w", err))
+		}
+
+		_, err = e.ShelterStore.UpdateShelter(r.Context(), shelterID, UpdateShelterData{
+			Name:        &fieldValues.Name,
+			Avatar:      avatar,
+			Address:     &fieldValues.Address,
+			Coordinates: coordinates,
+			Description: &fieldValues.Description,
+		})
+		if err != nil {
+			e.Log.Error("Unable to update shelter.", "error", err.Error(), "shelter_id", shelterID)
+			e.renderPage(w, http.StatusInternalServerError, shelterUpdateInfoPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Shelter:     shelter,
+				FieldValues: fieldValues,
+				Flash:       newFlash(flashLevelError, clientMessageUnexpectedError),
+			})
+			return
+		}
+
+		e.Log.Info("Shelter info updated.", "shelter_id", shelterID, "user_id", loginSessionData.UserID)
+
+		flashData := newFlash(flashLevelSuccess, "Shelter info was updated successfully.")
+		e.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		redirectURL := strings.ReplaceAll(e.SuccessRedirectURL, "{shelter_id}", shelterID)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
+
+	e.renderPage(w, http.StatusOK, shelterUpdateInfoPageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		Shelter: shelter,
+		FieldValues: shelterFormValues{
+			Name:        shelter.Name,
+			Address:     shelter.Address,
+			Coordinates: shelter.Coordinates.String(),
+			Description: shelter.Description,
+		},
+	})
+}
+
+func (e ShelterUpdateInfoHandler) renderPage(w http.ResponseWriter, status int, data shelterUpdateInfoPageData) {
+	err := RenderPage(w, shelterUpdateInfoPage, status, data)
+	if err != nil {
+		e.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: data.basePageData,
+			Status:       http.StatusInternalServerError,
+			Message:      clientMessageUnexpectedError,
 		})
 		return
 	}
