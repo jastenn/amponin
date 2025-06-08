@@ -1,7 +1,3 @@
-.shelter-role-list__heading {
-	margin-bottom: calc(var(--element-spacing-vertical)*2);
-}
-
 .shelter-role-list {
 	display: flex;
 	flex-direction: column;

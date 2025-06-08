@@ -10,6 +10,16 @@
 			<p class="card__heading-secondary">{{ .Shelter.Name }}</p>
 		</div>
 
+		{{ with .Flash }} 
+			<div class="card__flash 
+				{{ if eq .Level `success` -}} card__flash--success
+				{{- else if eq .Level `warn` -}} card__flash--warn 
+				{{- else if eq .Level `error` -}} card__flash--error {{- end -}}"
+			>
+				{{ .Message }}
+			</div>	
+		{{ end }}
+
 		<ul class="shelter-role-list">
 			{{ range .Roles }}
 				<li class="shelter-role-list__item">

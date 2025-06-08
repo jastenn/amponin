@@ -1,0 +1,43 @@
+{{ define "head" }}
+	<title>Add Role - Amponin</title>
+{{ end }}
+{{ define "content" }}
+	<form class="card card--sm mx-auto" method="post">
+		<div class="card__heading shelter-role-list__heading">
+			<h1 class="card__heading-primary">Add Role</h1>		
+			<p class="card__heading-secondary">{{ .Shelter.Name }}</p>
+		</div>
+
+		{{ with .Flash }} 
+			<div class="card__flash 
+				{{ if eq .Level `success` -}} card__flash--success
+				{{- else if eq .Level `warn` -}} card__flash--warn 
+				{{- else if eq .Level `error` -}} card__flash--error {{- end -}}"
+			>
+				{{ .Message }}
+			</div>	
+		{{ end }}
+
+		<div>
+			<label for="email" class="form-label">Email</label>
+			<input type="email" name="email" value="{{ .FieldValues.Email }}"
+				class="form-control {{ with .FieldErrors.Email }} form-control--invalid {{ end }}"
+				{{ with .FieldErrors.Email }} aria-invalid="true" {{ end }}
+			>
+			{{ with .FieldErrors.Email }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+
+		<div>
+			<label for="role" class="form-label">Role</label>
+			<select id="role" name="role" class="form-control {{ with .FieldErrors.Role -}} form-control--invalid {{- end }} "
+				{{ with .FieldErrors.Role }} aria-invalid="true" {{ end }}
+			>
+				<option value="editor" {{ if eq .FieldValues.Role `editor` }} selected {{ end }}>Editor</option>	
+				<option value="admin" {{ if eq .FieldValues.Role `admin` }} selected {{ end }}>Admin</option>	
+			</select>
+			{{ with .FieldErrors.Role }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+
+		<button type="submit" class="button">Submit</button>
+	</form>
+{{ end }}

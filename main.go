@@ -205,6 +205,12 @@ func main() {
 		SessionStore: sessionStore,
 		ShelterStore: store,
 	})
+	mux.Handle("/shelter/{shelter_id}/roles/add", &ShelterAddRoleHandler{
+		Log:                log,
+		SessionStore:       sessionStore,
+		ShelterStore:       store,
+		SuccessRedirectURL: "/shelter/{shelter_id}/roles",
+	})
 	mux.Handle("/shelter/{shelter_id}/post", &PostPetHandler{
 		Log:               log,
 		SessionStore:      sessionStore,

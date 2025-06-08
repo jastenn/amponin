@@ -434,6 +434,33 @@ func (p *PGStore) FindManagedShelter(ctx context.Context, userID string) ([]*Man
 	return result, nil
 }
 
+func (p *PGStore) RegisterShelterRoleWithEmail(ctx context.Context, userEmail string, shelterID string, role ShelterRole) error {
+	n, err := p.DB.ExecContext(ctx,
+		` 
+		 INSERT INTO shelter_roles (shelter_id, user_id, role) 
+		 SELECT $1, user_id, $2 FROM users WHERE email = $3`,
+		shelterID, role, userEmail,
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "pkey_shelter_roles") {
+			return ErrDuplicateShelterRoleUser
+		}
+
+		return fmt.Errorf("unable to insert into shelter_roles: %w", err)
+	}
+
+	rowsAffected, err := n.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("unexpected error while getting rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrNoUser
+	}
+
+	return nil
+}
+
 func (p *PGStore) FindShelterRoles(ctx context.Context, shelterID string) ([]ShelterRoleFindResult, error) {
 	rows, err := p.DB.QueryContext(ctx,
 		`SELECT r.role, u.user_id, u.name, u.email,

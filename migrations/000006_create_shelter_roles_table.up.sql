@@ -9,5 +9,5 @@ CREATE TABLE IF NOT EXISTS shelter_roles (
     user_id text not null references users(user_id),
     role role not null,
 
-    primary key (shelter_id, user_id) 
+    constraint pkey_shelter_roles primary key (shelter_id, user_id) 
 );

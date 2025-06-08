@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"mime/multipart"
 	"net/http"
+	"net/mail"
 	"slices"
 	"strconv"
 	"strings"
@@ -282,9 +283,11 @@ type shelterByIDPageData struct {
 var getShelterByIDPage = template.Must(template.ParseFS(embedFS, "templates/pages/shelter/get_by_id.html", "templates/pages/base.html"))
 
 func (g *GetShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	shelterID := r.PathValue("shelter_id")
 	var loginSessionData *loginSession
 	g.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+
+	shelterID := r.PathValue("shelter_id")
+
 	shelter, err := g.ShelterGetterByID.GetShelterByID(r.Context(), shelterID)
 	if err != nil {
 		if errors.Is(err, ErrNoShelter) {
@@ -325,7 +328,8 @@ func (g *GetShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 
 	var flashData *flash
-	g.SessionStore.Decode(r, sessionKeyFlash, &flashData)
+	g.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flashData)
+
 	err = RenderPage(w, getShelterByIDPage, http.StatusOK, shelterByIDPageData{
 		basePageData: basePageData{
 			LoginSession: loginSessionData,
@@ -730,6 +734,7 @@ type ShelterRoleFindResult struct {
 
 type shelterRolesPageData struct {
 	basePageData
+	Flash   *flash
 	Shelter *Shelter
 	Roles   []ShelterRoleFindResult
 }
@@ -802,10 +807,14 @@ func (s *ShelterRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var flashData *flash
+	s.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flashData)
+
 	err = RenderPage(w, shelterRolesPage, http.StatusOK, shelterRolesPageData{
 		basePageData: basePageData{
 			LoginSession: loginSessionData,
 		},
+		Flash:   flashData,
 		Shelter: shelter,
 		Roles:   roles,
 	})
@@ -817,6 +826,208 @@ func (s *ShelterRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			},
 			Status:  http.StatusInternalServerError,
 			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+}
+
+type ShelterAddRoleHandler struct {
+	Log          *slog.Logger
+	SessionStore *CookieSessionStore
+	ShelterStore interface {
+		shelterGetterWithRole
+		shelterRoleRegistryWithEmail
+	}
+	SuccessRedirectURL string
+}
+
+var ErrDuplicateShelterRoleUser = errors.New("user already have a role in shelter")
+
+type shelterRoleRegistryWithEmail interface {
+	RegisterShelterRoleWithEmail(ctx context.Context, userEmail string, shelterID string, role ShelterRole) error
+}
+
+type shelterAddRolePageData struct {
+	basePageData
+	Flash       *flash
+	Shelter     *Shelter
+	FieldValues shelterAddRoleValues
+	FieldErrors shelterAddRoleErrors
+}
+
+type shelterAddRoleValues struct {
+	Email string
+	Role  ShelterRole
+}
+
+type shelterAddRoleErrors struct {
+	Email string
+	Role  ShelterRole
+}
+
+func validateShelterAddRoleValues(fieldValues shelterAddRoleValues) (valid bool, fieldErrors shelterAddRoleErrors) {
+	if fieldValues.Email == "" {
+		fieldErrors.Email = "Please fill out this field."
+	} else if _, err := mail.ParseAddress(fieldValues.Email); err != nil {
+		fieldErrors.Email = "Email is invalid."
+	}
+
+	validRoles := []ShelterRole{ShelterRoleSuperAdmin, ShelterRoleAdmin, ShelterRoleEditor}
+	if fieldValues.Role == "" {
+		fieldErrors.Role = "Please fill out this field."
+	} else if !slices.Contains(validRoles, fieldValues.Role) {
+		fieldErrors.Role = "Role is invalid."
+	}
+
+	valid = fieldErrors.Email == "" && fieldErrors.Role == ""
+	return valid, fieldErrors
+}
+
+var shelterAddRolePage = template.Must(template.ParseFS(embedFS, "templates/pages/shelter/add_role.html", "templates/pages/base.html"))
+
+func (s *ShelterAddRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	s.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+
+	if loginSessionData == nil {
+		s.Log.Debug("Unauthorized. User is not logged in.")
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized. Please login first.",
+		})
+		return
+	}
+
+	shelterID := r.PathValue("shelter_id")
+
+	shelter, role, err := s.ShelterStore.GetShelterWithRole(r.Context(), shelterID, loginSessionData.UserID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelter) {
+			s.Log.Debug("Shelter not found.", "shelter_id", shelterID)
+			renderErrorPage(w, errorPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Status:  http.StatusNotFound,
+				Message: "Shelter doesn't exists.",
+			})
+			return
+		}
+
+		s.Log.Error("Unable to get shelter role.", "shelter_id", shelterID, "user_id", loginSessionData.UserID)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+
+	allowedRoles := []ShelterRole{ShelterRoleSuperAdmin, ShelterRoleAdmin}
+	if !slices.Contains(allowedRoles, role) {
+		s.Log.Debug("User is not authorized to perform action for this shelter.", "shelter_id", shelterID, "user_id", loginSessionData.UserID, "role", role)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized.",
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		fieldValues := shelterAddRoleValues{
+			Email: r.FormValue("email"),
+			Role:  ShelterRole(r.FormValue("role")),
+		}
+
+		valid, fieldErrors := validateShelterAddRoleValues(fieldValues)
+		if !valid {
+			s.Log.Debug("Field validation failed.", "field_errors", fieldErrors, "field_values", fieldValues)
+			s.renderPage(w, http.StatusUnprocessableEntity, shelterAddRolePageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Shelter:     shelter,
+				FieldValues: fieldValues,
+				FieldErrors: fieldErrors,
+			})
+			return
+		}
+
+		err := s.ShelterStore.RegisterShelterRoleWithEmail(r.Context(), fieldValues.Email, shelterID, fieldValues.Role)
+		if err != nil {
+			if errors.Is(err, ErrDuplicateShelterRoleUser) {
+				s.Log.Debug("User already has a role in this shelter.", "shelter_id", shelter.ID, "user_email", fieldValues.Email)
+				flashData := newFlash(flashLevelError, "User already has a role in this shelter.")
+				s.renderPage(w, http.StatusUnprocessableEntity, shelterAddRolePageData{
+					basePageData: basePageData{
+						LoginSession: loginSessionData,
+					},
+					Flash:       flashData,
+					Shelter:     shelter,
+					FieldValues: fieldValues,
+				})
+				return
+			}
+
+			if errors.Is(err, ErrNoUser) {
+				s.Log.Debug("User with the given email not found.", "shelter_id", shelterID, "user_email", fieldValues.Email)
+				message := fmt.Sprintf("User with %v email doesn't exists.", fieldValues.Email)
+				flashData := newFlash(flashLevelError, message)
+				s.renderPage(w, http.StatusUnprocessableEntity, shelterAddRolePageData{
+					basePageData: basePageData{
+						LoginSession: loginSessionData,
+					},
+					Flash:       flashData,
+					Shelter:     shelter,
+					FieldValues: fieldValues,
+				})
+				return
+			}
+
+			s.Log.Error("Unable to register shelter role with email.", "error", err.Error(), "shelter_id", shelterID, "user_email", fieldValues.Email)
+			s.renderPage(w, http.StatusInternalServerError, shelterAddRolePageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Shelter:     shelter,
+				Flash:       newFlash(flashLevelError, clientMessageUnexpectedError),
+				FieldValues: fieldValues,
+			})
+			return
+		}
+
+		message := fmt.Sprintf("Success! %v has been added and assigned the role of %v", fieldValues.Email, fieldValues.Role)
+		flashData := newFlash(flashLevelSuccess, message)
+		s.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		s.Log.Info("User has been added and assigned a role", "shelter_id", shelterID, "user_email", fieldValues.Email, "role", fieldValues.Role)
+
+		redirect := strings.ReplaceAll(s.SuccessRedirectURL, "{shelter_id}", shelterID)
+		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		return
+	}
+
+	s.renderPage(w, http.StatusOK, shelterAddRolePageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		Shelter: shelter,
+	})
+}
+
+func (s *ShelterAddRoleHandler) renderPage(w http.ResponseWriter, status int, data shelterAddRolePageData) {
+	err := RenderPage(w, shelterAddRolePage, status, data)
+	if err != nil {
+		s.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: data.basePageData,
+			Status:       http.StatusInternalServerError,
+			Message:      clientMessageUnexpectedError,
 		})
 		return
 	}
