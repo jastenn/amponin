@@ -94,6 +94,7 @@ func (c *CookieSessionStore) Remove(w http.ResponseWriter, key string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:   key,
 		MaxAge: -1,
+		Path:   "/",
 	})
 }
 
