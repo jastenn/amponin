@@ -710,6 +710,118 @@ func (e ShelterUpdateInfoHandler) renderPage(w http.ResponseWriter, status int, 
 	}
 }
 
+type ShelterRoleHandler struct {
+	Log          *slog.Logger
+	SessionStore *CookieSessionStore
+	ShelterStore interface {
+		shelterRolesFinder
+		shelterGetterWithRole
+	}
+}
+
+type shelterRolesFinder interface {
+	FindShelterRoles(ctx context.Context, shelterID string) ([]ShelterRoleFindResult, error)
+}
+
+type ShelterRoleFindResult struct {
+	Role ShelterRole
+	User *User
+}
+
+type shelterRolesPageData struct {
+	basePageData
+	Shelter *Shelter
+	Roles   []ShelterRoleFindResult
+}
+
+var shelterRolesPage = template.Must(template.ParseFS(embedFS, "templates/pages/shelter/roles.html", "templates/pages/base.html"))
+
+func (s *ShelterRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	s.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+
+	if loginSessionData == nil {
+		s.Log.Debug("Unauthorized. User is not logged in.")
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized. Please login first.",
+		})
+		return
+	}
+
+	shelterID := r.PathValue("shelter_id")
+
+	shelter, role, err := s.ShelterStore.GetShelterWithRole(r.Context(), shelterID, loginSessionData.UserID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelter) {
+			s.Log.Debug("Shelter not found.", "shelter_id", shelterID)
+			renderErrorPage(w, errorPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Status:  http.StatusNotFound,
+				Message: "Shelter doesn't exists.",
+			})
+			return
+		}
+
+		s.Log.Error("Unable to get shelter role.", "shelter_id", shelterID, "user_id", loginSessionData.UserID)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+
+	allowedRoles := []ShelterRole{ShelterRoleSuperAdmin, ShelterRoleAdmin}
+	if !slices.Contains(allowedRoles, role) {
+		s.Log.Debug("User is not authorized to perform action for this shelter.", "shelter_id", shelterID, "user_id", loginSessionData.UserID, "role", role)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized.",
+		})
+		return
+	}
+
+	roles, err := s.ShelterStore.FindShelterRoles(r.Context(), shelterID)
+	if err != nil {
+		s.Log.Error("Unable to query for shelter with related roles.", "error", err.Error(), "shelter_id", shelterID)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+
+	err = RenderPage(w, shelterRolesPage, http.StatusOK, shelterRolesPageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		Shelter: shelter,
+		Roles:   roles,
+	})
+	if err != nil {
+		s.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+}
+
 type PostPetHandler struct {
 	Log               *slog.Logger
 	SessionStore      *CookieSessionStore

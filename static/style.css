@@ -3,6 +3,7 @@
 :root {
 	--color-primary: #191D23;
 	--color-primary-hover: #3E4043;
+	--color-primary-focus: var(--color-primary-hover);
 	--color-primary-inverse: white;
 	--color-primary-muted: #8793AB;
 	--color-primary-muted-focus: #434D60;
@@ -24,6 +25,12 @@
 	--color-error-inverse: white;
 	--color-error-muted: #FFE3E0;
 	--color-error-muted-inverse: var(--color-error);
+
+	--color-danger: #e54b4b;
+	--color-danger-focus: #e85e5e;
+	--color-danger-inverse: white;
+	--color-danger-muted: #FFE3E0;
+	--color-danger-muted-inverse: var(--color-danger);
 
 	--color-text: white;
 	--color-background: #FFF4EB;
@@ -168,10 +175,6 @@ a:not([class]):focus {
 	position: relative;
 }
 
-.button--full-width {
-	width: 100%;
-}
-
 .button__icon {
 	position: absolute;
 	top: 50%;
@@ -179,6 +182,11 @@ a:not([class]):focus {
 	transform: translateY(-50%);
 	height: var(--icon-size);
 	width: var(--icon-size);
+}
+
+.button--full-width {
+	display: block;
+	width: 100%;
 }
 
 .button--small {

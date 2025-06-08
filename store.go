@@ -434,6 +434,45 @@ func (p *PGStore) FindManagedShelter(ctx context.Context, userID string) ([]*Man
 	return result, nil
 }
 
+func (p *PGStore) FindShelterRoles(ctx context.Context, shelterID string) ([]ShelterRoleFindResult, error) {
+	rows, err := p.DB.QueryContext(ctx,
+		`SELECT r.role, u.user_id, u.name, u.email,
+			u.avatar, u.created_at, u.updated_at
+		 FROM shelter_roles r
+		 JOIN users u USING(user_id)
+		 WHERE r.shelter_id = $1`,
+		shelterID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to queyr shelter_roles table: %w", err)
+	}
+	defer rows.Close()
+
+	var result []ShelterRoleFindResult
+	for rows.Next() {
+		var role string
+		user := &User{}
+		err := rows.Scan(
+			&role, &user.ID, &user.Name, &user.Email,
+			&user.Avatar, &user.CreatedAt, &user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan shelter_roles query result: %w", err)
+		}
+
+		result = append(result, ShelterRoleFindResult{
+			Role: ShelterRole(role),
+			User: user,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("unexpected error while iterating through query result: %w", err)
+	}
+
+	return result, nil
+}
+
 func (p *PGStore) GetShelterRole(ctx context.Context, shelterID, userID string) (ShelterRole, error) {
 	row := p.DB.QueryRowContext(ctx,
 		`SELECT role FROM shelter_roles

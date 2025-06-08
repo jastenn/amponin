@@ -192,13 +192,6 @@ func main() {
 		NotFoundHandler: notFoundHandler,
 		ShelterGetter:   store,
 	})
-	mux.Handle("/shelter/{shelter_id}/post", &PostPetHandler{
-		Log:               log,
-		SessionStore:      sessionStore,
-		ShelterRoleGetter: store,
-		PetRegistry:       store,
-		ImageStore:        imageStore,
-	})
 	mux.Handle("/shelter/{shelter_id}/update-info", &ShelterUpdateInfoHandler{
 		Log:                log,
 		SessionStore:       sessionStore,
@@ -206,6 +199,18 @@ func main() {
 		ShelterStore:       store,
 		ImageStore:         imageStore,
 		SuccessRedirectURL: "/shelter/{shelter_id}",
+	})
+	mux.Handle("/shelter/{shelter_id}/roles", &ShelterRoleHandler{
+		Log:          log,
+		SessionStore: sessionStore,
+		ShelterStore: store,
+	})
+	mux.Handle("/shelter/{shelter_id}/post", &PostPetHandler{
+		Log:               log,
+		SessionStore:      sessionStore,
+		ShelterRoleGetter: store,
+		PetRegistry:       store,
+		ImageStore:        imageStore,
 	})
 	mux.Handle("/pet/{pet_id}", &PetByIDHandler{
 		Log:             log,

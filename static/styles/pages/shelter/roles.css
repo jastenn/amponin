@@ -1,0 +1,51 @@
+.shelter-role-list__heading {
+	margin-bottom: calc(var(--element-spacing-vertical)*2);
+}
+
+.shelter-role-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--element-spacing-vertical);
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.shelter-role-list__item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.shelter-role-list__role {
+	font-size: .875rem;
+	text-transform: uppercase;
+	margin: 0;
+}
+
+.shelter-role-list__name {
+	margin: 0;
+}
+
+.shelter-role-list__email {
+	margin: 0;
+}
+
+.shelter-role-list__action {
+	display: inline-block;
+	width: 1.5rem;
+	height: 1.5rem;
+	color: var(--color-primary);
+}
+
+.shelter-role-list__action:hover {
+	color: var(--color-primary-focus);
+}
+
+.shelter-role-list__action--danger {
+	color: var(--color-danger);
+}
+
+.shelter-role-list__action--danger:hover {
+	color: var(--color-danger-focus);
+}

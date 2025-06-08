@@ -1,0 +1,51 @@
+{{ define "head" }}
+	<title>Shelter Roles - Amponin</title>
+	<link rel="stylesheet" href="/static/styles/pages/shelter/roles.css">
+{{ end }}
+
+{{ define "content" }}
+	<div class="card card--sm mx-auto">
+		<div class="card__heading shelter-role-list__heading">
+			<h1 class="card__heading-primary">Roles</h1>		
+			<p class="card__heading-secondary">{{ .Shelter.Name }}</p>
+		</div>
+
+		<ul class="shelter-role-list">
+			{{ range .Roles }}
+				<li class="shelter-role-list__item">
+					<div class="shelter-role-list__details">
+						<p class="shelter-role-list__role">{{ .Role }}</p>
+						<b class="shelter-role-list__name">{{ .User.Name }} {{ if eq $.LoginSession.Email .User.Email }} (You) {{ end }}</b>
+						<p class="shelter-role-list__email">{{ .User.Email }}</p>
+					</div>
+					{{ if ne .Role "super_admin" }}
+						<div class="shelter-role-list__actions">
+							<a href="/shelter/{{ $.Shelter.ID }}/roles/remove?user-id={{ .User.ID }}" class="shelter-role-list__action shelter-role-list__action--danger">
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+									<path fill-rule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm4-7a.75.75 0 0 0-.75-.75h-6.5a.75.75 0 0 0 0 1.5h6.5A.75.75 0 0 0 12 8Z" clip-rule="evenodd" />
+								</svg>
+								<span class="sr-only">Remove</span>
+							</a>
+							<a href="/shelter/{{ $.Shelter.ID }}/roles/remove?user-id={{ .User.ID }}" class="shelter-role-list__action">
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+									<path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474Z"/>
+									<path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9A.75.75 0 0 1 14 9v2.25A2.75 2.75 0 0 1 11.25 14h-6.5A2.75 2.75 0 0 1 2 11.25v-6.5A2.75 2.75 0 0 1 4.75 2H7a.75.75 0 0 1 0 1.5H4.75Z" />
+								</svg>
+								<span class="sr-only">Edit</span>
+							</a>
+						</div>
+					{{ end }}
+				</li>
+			{{ end }}
+
+			<li>
+				<a href="/shelter/{{ $.Shelter.ID }}/roles/add" class="button button--with-icon button--full-width">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="button__icon">
+						  <path d="M8.5 4.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0ZM10 13c.552 0 1.01-.452.9-.994a5.002 5.002 0 0 0-9.802 0c-.109.542.35.994.902.994h8ZM12.5 3.5a.75.75 0 0 1 .75.75v1h1a.75.75 0 0 1 0 1.5h-1v1a.75.75 0 0 1-1.5 0v-1h-1a.75.75 0 0 1 0-1.5h1v-1a.75.75 0 0 1 .75-.75Z" />
+					</svg>
+					<span>Add Role</span>
+				</a>
+			</li>
+		</ul>
+	</div>
+{{ end }}
