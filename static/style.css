@@ -26,6 +26,8 @@
 	--color-error-muted: #FFE3E0;
 	--color-error-muted-inverse: var(--color-error);
 
+	--color-input-border-readonly: var(--color-secondary);
+
 	--color-danger: #e54b4b;
 	--color-danger-focus: #e85e5e;
 	--color-danger-inverse: white;
@@ -216,8 +218,12 @@ a:not([class]):focus {
 	outline-offset: 2px;
 }
 
-.form-control:focus {
+.form-control:focus:not([readonly]) {
 	box-shadow: inset 0 0 0 .125rem var(--color-primary);
+}
+
+.form-control[readonly] {
+	box-shadow: inset 0 0 0 .125rem var(--color-input-border-readonly);
 }
 
 textarea.form-control {

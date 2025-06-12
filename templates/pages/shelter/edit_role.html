@@ -1,0 +1,32 @@
+{{ define "head" }}
+	<title>Add Role - Amponin</title>
+{{ end }}
+
+{{ define "content" }}
+	<form class="card card--sm mx-auto" method="post">
+		<div class="card__heading shelter-role-list__heading">
+			<h1 class="card__heading-primary">Edit Role</h1>		
+			<p class="card__heading-secondary">{{ .ShelterName }}</p>
+		</div>
+
+		<div>
+			<label for="email" class="form-label">Email</label>
+			<input type="email" readonly name="email" value="{{ .UserEmail }}"
+				class="form-control"
+			>
+		</div>
+
+		<div>
+			<label for="role" class="form-label">Role</label>
+			<select id="role" name="role" class="form-control {{ with .RoleFieldError -}} form-control--invalid {{- end }} "
+				{{ with .RoleFieldError }} aria-invalid="true" {{ end }}
+			>
+				<option value="editor" {{ if eq .RoleField `editor` }} selected {{ end }}>Editor</option>	
+				<option value="admin" {{ if eq .RoleField `admin` }} selected {{ end }}>Admin</option>	
+			</select>
+			{{ with .RoleFieldError }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+
+		<button type="submit" class="button">Submit</button>
+	</form>
+{{ end }}

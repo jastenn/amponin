@@ -200,7 +200,7 @@ func main() {
 		ImageStore:         imageStore,
 		SuccessRedirectURL: "/shelter/{shelter_id}",
 	})
-	mux.Handle("/shelter/{shelter_id}/roles", &ShelterRoleHandler{
+	mux.Handle("/shelter/{shelter_id}/roles", &ShelterRolesHandler{
 		Log:          log,
 		SessionStore: sessionStore,
 		ShelterStore: store,
@@ -212,6 +212,13 @@ func main() {
 		SuccessRedirectURL: "/shelter/{shelter_id}/roles",
 	})
 	mux.Handle("/shelter/{shelter_id}/roles/remove", &ShelterRemoveRoleHandler{
+		Log:             log,
+		SessionStore:    sessionStore,
+		ShelterStore:    store,
+		UserStore:       store,
+		ShelterRolesURL: "/shelter/{shelter_id}/roles",
+	})
+	mux.Handle("/shelter/{shelter_id}/roles/edit", &ShelterEditRoleHandler{
 		Log:             log,
 		SessionStore:    sessionStore,
 		ShelterStore:    store,

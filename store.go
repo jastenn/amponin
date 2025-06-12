@@ -486,6 +486,29 @@ func (p *PGStore) RegisterShelterRoleWithEmail(ctx context.Context, userEmail st
 	return nil
 }
 
+func (p *PGStore) EditShelterRole(ctx context.Context, shelterID string, userID string, newRole ShelterRole) error {
+	n, err := p.DB.ExecContext(ctx,
+		`UPDATE shelter_roles
+			SET role = $1
+		 WHERE shelter_id = $2 AND user_id = $3`,
+		newRole, shelterID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("unable to update shelter_role table: %w", err)
+	}
+
+	rowsAffected, err := n.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("unexpected error while getting rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrNoShelterRole
+	}
+
+	return nil
+}
+
 func (p *PGStore) RemoveShelterRole(ctx context.Context, shelterID string, userID string) error {
 	n, err := p.DB.ExecContext(ctx,
 		`DELETE FROM shelter_roles

@@ -30,19 +30,23 @@
 					</div>
 					{{ if ne .Role "super_admin" }}
 						<div class="shelter-role-list__actions">
-							<a href="/shelter/{{ $.Shelter.ID }}/roles/remove?user-id={{ .User.ID }}" class="shelter-role-list__action shelter-role-list__action--danger">
-								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
-									<path fill-rule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm4-7a.75.75 0 0 0-.75-.75h-6.5a.75.75 0 0 0 0 1.5h6.5A.75.75 0 0 0 12 8Z" clip-rule="evenodd" />
-								</svg>
-								<span class="sr-only">Remove</span>
-							</a>
-							<a href="#" class="shelter-role-list__action">
-								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
-									<path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474Z"/>
-									<path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9A.75.75 0 0 1 14 9v2.25A2.75 2.75 0 0 1 11.25 14h-6.5A2.75 2.75 0 0 1 2 11.25v-6.5A2.75 2.75 0 0 1 4.75 2H7a.75.75 0 0 1 0 1.5H4.75Z" />
-								</svg>
-								<span class="sr-only">Edit</span>
-							</a>
+							{{ if or (eq .Role "editor") (eq $.UserRole "super_admin")  }}
+								<a href="/shelter/{{ $.Shelter.ID }}/roles/remove?user-id={{ .User.ID }}" class="shelter-role-list__action shelter-role-list__action--danger">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+										<path fill-rule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm4-7a.75.75 0 0 0-.75-.75h-6.5a.75.75 0 0 0 0 1.5h6.5A.75.75 0 0 0 12 8Z" clip-rule="evenodd" />
+									</svg>
+									<span class="sr-only">Remove</span>
+								</a>
+							{{ end }}
+							{{ if eq $.UserRole "super_admin" }}
+								<a href="/shelter/{{ $.Shelter.ID }}/roles/edit?user-id={{ .User.ID }}" class="shelter-role-list__action">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+										<path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474Z"/>
+										<path d="M4.75 3.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h6.5c.69 0 1.25-.56 1.25-1.25V9A.75.75 0 0 1 14 9v2.25A2.75 2.75 0 0 1 11.25 14h-6.5A2.75 2.75 0 0 1 2 11.25v-6.5A2.75 2.75 0 0 1 4.75 2H7a.75.75 0 0 1 0 1.5H4.75Z" />
+									</svg>
+									<span class="sr-only">Edit</span>
+								</a>
+							{{ end }}
 						</div>
 					{{ end }}
 				</li>
