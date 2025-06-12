@@ -65,6 +65,10 @@ header + * {
 	margin-top: 4rem;
 }
 
+strong {
+	font-weight: 600;
+}
+
 a:not([class]) {
 	color: var(--color-primary-muted, gray)
 }

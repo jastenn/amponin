@@ -1033,6 +1033,205 @@ func (s *ShelterAddRoleHandler) renderPage(w http.ResponseWriter, status int, da
 	}
 }
 
+type ShelterRemoveRoleHandler struct {
+	Log          *slog.Logger
+	SessionStore *CookieSessionStore
+	ShelterStore interface {
+		shelterGetterWithRole
+		shelterRoleGetter
+		shelterRoleRemover
+	}
+	UserStore       userGetter
+	ShelterRolesURL string
+}
+
+type shelterRoleRemover interface {
+	RemoveShelterRole(ctx context.Context, shelterID string, userID string) error
+}
+
+type userGetter interface {
+	GetUser(ctx context.Context, userID string) (*User, error)
+}
+
+type shelterRemoveRolePageData struct {
+	basePageData
+	Shelter                 *Shelter
+	User                    *User
+	Role                    ShelterRole
+	ConfirmationPhrase      string
+	ConfirmationPhraseError string
+}
+
+var shelterRemoveRolePage = template.Must(template.ParseFS(embedFS, "templates/pages/shelter/remove_role.html", "templates/pages/base.html"))
+
+func (s *ShelterRemoveRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var loginSessionData *loginSession
+	s.SessionStore.Decode(r, sessionKeyLoginSession, &loginSessionData)
+
+	if loginSessionData == nil {
+		s.Log.Debug("Unauthorized. User is not logged in.")
+		renderErrorPage(w, errorPageData{
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized. Please login first.",
+		})
+		return
+	}
+
+	shelterID := r.PathValue("shelter_id")
+
+	shelter, role, err := s.ShelterStore.GetShelterWithRole(r.Context(), shelterID, loginSessionData.UserID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelter) {
+			s.Log.Debug("Shelter not found.", "shelter_id", shelterID)
+			renderErrorPage(w, errorPageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Status:  http.StatusNotFound,
+				Message: "Shelter doesn't exists.",
+			})
+			return
+		}
+
+		s.Log.Error("Unable to get shelter role.", "shelter_id", shelterID, "user_id", loginSessionData.UserID)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusInternalServerError,
+			Message: clientMessageUnexpectedError,
+		})
+		return
+	}
+
+	allowedRoles := []ShelterRole{ShelterRoleSuperAdmin, ShelterRoleAdmin}
+	if !slices.Contains(allowedRoles, role) {
+		s.Log.Debug("User is not authorized to perform action for this shelter.", "shelter_id", shelterID, "user_id", loginSessionData.UserID, "role", role)
+		renderErrorPage(w, errorPageData{
+			basePageData: basePageData{
+				LoginSession: loginSessionData,
+			},
+			Status:  http.StatusUnauthorized,
+			Message: "Unauthorized.",
+		})
+		return
+	}
+
+	targetID := r.URL.Query().Get("user-id")
+	targetRole, err := s.ShelterStore.GetShelterRole(r.Context(), shelterID, targetID)
+	if err != nil {
+		if errors.Is(err, ErrNoShelterRole) {
+			s.Log.Debug("This user does not have a role assigned to this shelter.", "shelter_id", shelterID, "user_id", targetID)
+
+			flashData := newFlash(flashLevelError, "The user does not have a role assigned to this shelter.")
+			s.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+			redirectURL := strings.ReplaceAll(s.ShelterRolesURL, "{shelter_id}", shelter.ID)
+			http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+			return
+		}
+
+		s.Log.Error("Unable to get target user shelter role.", "shelter_id", shelterID, "user_id", targetID)
+
+		flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
+		s.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		redirectURL := strings.ReplaceAll(s.ShelterRolesURL, "{shelter_id}", shelter.ID)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
+
+	if targetRole == ShelterRoleSuperAdmin {
+		flashData := newFlash(flashLevelError, "Super admin are not allowed to be removed this way.")
+		s.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		redirectURL := strings.ReplaceAll(s.ShelterRolesURL, "{shelter_id}", shelter.ID)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
+
+	targetUser, err := s.UserStore.GetUser(r.Context(), targetID)
+	if err != nil {
+		s.Log.Error("Unable to get target user.", "user_id", targetID)
+
+		flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
+		s.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		redirectURL := strings.ReplaceAll(s.ShelterRolesURL, "{shelter_id}", shelter.ID)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		confirmationPhrase := r.FormValue("confirmation-phrase")
+		var confirmationPhraseError string
+		if confirmationPhrase == "" {
+			confirmationPhraseError = "Please fill out this field."
+		} else if confirmationPhrase != "Confirm role removal" {
+			confirmationPhraseError = "Confirmation phrase incorrect."
+		}
+
+		if confirmationPhraseError != "" {
+			s.Log.Debug("Confirmation Phrase validation error", "error", confirmationPhraseError)
+			s.renderPage(w, http.StatusUnprocessableEntity, shelterRemoveRolePageData{
+				basePageData: basePageData{
+					LoginSession: loginSessionData,
+				},
+				Shelter:                 shelter,
+				User:                    targetUser,
+				Role:                    targetRole,
+				ConfirmationPhrase:      confirmationPhrase,
+				ConfirmationPhraseError: confirmationPhraseError,
+			})
+			return
+		}
+
+		err := s.ShelterStore.RemoveShelterRole(r.Context(), shelterID, targetID)
+		if err != nil {
+			s.Log.Error("Unable to remove shelter role.", "error", err.Error())
+
+			flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
+			s.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+			redirectURL := strings.ReplaceAll(s.ShelterRolesURL, "{shelter_id}", shelter.ID)
+			http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+			return
+		}
+
+		s.Log.Info("Shelter role associated with the user removed successfully.", "shelter_id", shelterID, "user_id", targetID)
+
+		message := fmt.Sprintf("Role associated with %v was removed.", targetUser.Email)
+		flashData := newFlash(flashLevelSuccess, message)
+		s.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		redirectURL := strings.ReplaceAll(s.ShelterRolesURL, "{shelter_id}", shelter.ID)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
+
+	s.renderPage(w, http.StatusOK, shelterRemoveRolePageData{
+		basePageData: basePageData{
+			LoginSession: loginSessionData,
+		},
+		Shelter: shelter,
+		User:    targetUser,
+		Role:    targetRole,
+	})
+}
+
+func (s *ShelterRemoveRoleHandler) renderPage(w http.ResponseWriter, status int, data shelterRemoveRolePageData) {
+	err := RenderPage(w, shelterRemoveRolePage, status, data)
+	if err != nil {
+		s.Log.Error("Unable to render page.", "error", err.Error())
+		renderErrorPage(w, errorPageData{
+			basePageData: data.basePageData,
+			Status:       http.StatusInternalServerError,
+			Message:      clientMessageUnexpectedError,
+		})
+		return
+	}
+}
+
 type PostPetHandler struct {
 	Log               *slog.Logger
 	SessionStore      *CookieSessionStore

@@ -15,6 +15,31 @@ type PGStore struct {
 	DB *sql.DB
 }
 
+func (p *PGStore) GetUser(ctx context.Context, userID string) (*User, error) {
+	row := p.DB.QueryRowContext(ctx,
+		`SELECT
+			user_id, name, email, avatar,
+			created_at, updated_at
+		 FROM users
+		 WHERE user_id = $1`,
+		userID,
+	)
+
+	user := &User{}
+	err := row.Scan(
+		&user.ID, &user.Name, &user.Email, &user.Avatar,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoUser
+		}
+		return nil, fmt.Errorf("unable to query user: %w", err)
+	}
+
+	return user, nil
+}
+
 func (c *PGStore) CreateLocalAccount(ctx context.Context, data NewLocalAccount) (*LocalAccount, *User, error) {
 	tx, err := c.DB.Begin()
 	if err != nil {
@@ -456,6 +481,28 @@ func (p *PGStore) RegisterShelterRoleWithEmail(ctx context.Context, userEmail st
 
 	if rowsAffected == 0 {
 		return ErrNoUser
+	}
+
+	return nil
+}
+
+func (p *PGStore) RemoveShelterRole(ctx context.Context, shelterID string, userID string) error {
+	n, err := p.DB.ExecContext(ctx,
+		`DELETE FROM shelter_roles
+		 WHERE shelter_id = $1 AND user_id = $2`,
+		shelterID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("unable to delete from shelter_roles: %w", err)
+	}
+
+	rowsAffected, err := n.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("unexpected error while getting rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrNoShelterRole
 	}
 
 	return nil

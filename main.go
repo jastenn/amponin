@@ -211,6 +211,13 @@ func main() {
 		ShelterStore:       store,
 		SuccessRedirectURL: "/shelter/{shelter_id}/roles",
 	})
+	mux.Handle("/shelter/{shelter_id}/roles/remove", &ShelterRemoveRoleHandler{
+		Log:             log,
+		SessionStore:    sessionStore,
+		ShelterStore:    store,
+		UserStore:       store,
+		ShelterRolesURL: "/shelter/{shelter_id}/roles",
+	})
 	mux.Handle("/shelter/{shelter_id}/post", &PostPetHandler{
 		Log:               log,
 		SessionStore:      sessionStore,

@@ -1,0 +1,25 @@
+{{ define "head" }}
+	<title>Remove Role - Amponin</title>
+{{ end }}
+
+{{ define "content" }}
+	<form class="card card--sm mx-auto" method="post" action="?user-id={{ .User.ID }}">
+		<div class="card__heading shelter-role-list__heading">
+			<h1 class="card__heading-primary">Remove Role</h1>		
+			<p class="card__heading-secondary">{{ .Shelter.Name }}</p>
+		</div>
+
+		<div>
+			<label for="confirmation-phrase">
+				To remove the role associated with <strong>{{ .User.Email }}</strong>, type <strong>Confirm role removal</strong> to continue.
+			</label>
+			<input id="confirmation-phrase" type="text" name="confirmation-phrase" value="{{ .ConfirmationPhrase }}"
+				class="form-control {{ with .ConfirmationPhraseError }} form-control--invalid {{ end }}"
+				{{ with .ConfirmationPhraseError }} aria-invalid="true" {{ end }}
+			>
+			{{ with .ConfirmationPhraseError }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
+		</div>
+
+		<button type="submit" class="button">Submit</button>
+	</form>
+{{ end }}
