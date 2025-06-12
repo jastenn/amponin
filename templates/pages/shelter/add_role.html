@@ -33,7 +33,9 @@
 				{{ with .FieldErrors.Role }} aria-invalid="true" {{ end }}
 			>
 				<option value="editor" {{ if eq .FieldValues.Role `editor` }} selected {{ end }}>Editor</option>	
-				<option value="admin" {{ if eq .FieldValues.Role `admin` }} selected {{ end }}>Admin</option>	
+				{{ if eq .UserRole "super_admin" }} 
+					<option value="admin" {{ if eq .FieldValues.Role `admin` }} selected {{ end }}>Admin</option>	
+				{{ end }}
 			</select>
 			{{ with .FieldErrors.Role }} <small class="form-helper form-helper--error">{{ . }}</small>{{ end }}
 		</div>

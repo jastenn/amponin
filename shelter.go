@@ -762,6 +762,7 @@ type shelterAddRolePageData struct {
 	basePageData
 	Flash       *flash
 	Shelter     *Shelter
+	UserRole    ShelterRole
 	FieldValues shelterAddRoleValues
 	FieldErrors shelterAddRoleErrors
 }
@@ -776,7 +777,7 @@ type shelterAddRoleErrors struct {
 	Role  ShelterRole
 }
 
-func validateShelterAddRoleValues(fieldValues shelterAddRoleValues) (valid bool, fieldErrors shelterAddRoleErrors) {
+func validateShelterAddRoleValues(userRole ShelterRole, fieldValues shelterAddRoleValues) (valid bool, fieldErrors shelterAddRoleErrors) {
 	if fieldValues.Email == "" {
 		fieldErrors.Email = "Please fill out this field."
 	} else if _, err := mail.ParseAddress(fieldValues.Email); err != nil {
@@ -788,6 +789,8 @@ func validateShelterAddRoleValues(fieldValues shelterAddRoleValues) (valid bool,
 		fieldErrors.Role = "Please fill out this field."
 	} else if !slices.Contains(validRoles, fieldValues.Role) {
 		fieldErrors.Role = "Role is invalid."
+	} else if userRole != ShelterRoleSuperAdmin && fieldValues.Role == ShelterRoleAdmin {
+		fieldErrors.Role = "You are not allowed to assign admin role."
 	}
 
 	valid = fieldErrors.Email == "" && fieldErrors.Role == ""
@@ -809,7 +812,7 @@ func (s *ShelterAddRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		shelterID:    shelterID,
 		allowedRoles: []ShelterRole{ShelterRoleAdmin, ShelterRoleSuperAdmin},
 	}
-	shelter, _, shouldReturn := shelterRoleGuard(r.Context(), w, cfg)
+	shelter, role, shouldReturn := shelterRoleGuard(r.Context(), w, cfg)
 	if shouldReturn {
 		return
 	}
@@ -820,13 +823,14 @@ func (s *ShelterAddRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 			Role:  ShelterRole(r.FormValue("role")),
 		}
 
-		valid, fieldErrors := validateShelterAddRoleValues(fieldValues)
+		valid, fieldErrors := validateShelterAddRoleValues(role, fieldValues)
 		if !valid {
 			s.Log.Debug("Field validation failed.", "field_errors", fieldErrors, "field_values", fieldValues)
 			s.renderPage(w, http.StatusUnprocessableEntity, shelterAddRolePageData{
 				basePageData: basePageData{
 					LoginSession: loginSessionData,
 				},
+				UserRole:    role,
 				Shelter:     shelter,
 				FieldValues: fieldValues,
 				FieldErrors: fieldErrors,
@@ -843,6 +847,7 @@ func (s *ShelterAddRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 					basePageData: basePageData{
 						LoginSession: loginSessionData,
 					},
+					UserRole:    role,
 					Flash:       flashData,
 					Shelter:     shelter,
 					FieldValues: fieldValues,
@@ -858,6 +863,7 @@ func (s *ShelterAddRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 					basePageData: basePageData{
 						LoginSession: loginSessionData,
 					},
+					UserRole:    role,
 					Flash:       flashData,
 					Shelter:     shelter,
 					FieldValues: fieldValues,
@@ -870,6 +876,7 @@ func (s *ShelterAddRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 				basePageData: basePageData{
 					LoginSession: loginSessionData,
 				},
+				UserRole:    role,
 				Shelter:     shelter,
 				Flash:       newFlash(flashLevelError, clientMessageUnexpectedError),
 				FieldValues: fieldValues,
@@ -892,7 +899,8 @@ func (s *ShelterAddRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		basePageData: basePageData{
 			LoginSession: loginSessionData,
 		},
-		Shelter: shelter,
+		UserRole: role,
+		Shelter:  shelter,
 	})
 }
 
@@ -953,7 +961,8 @@ func (s *ShelterRemoveRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		shelterID:    shelterID,
 		allowedRoles: []ShelterRole{ShelterRoleAdmin, ShelterRoleSuperAdmin},
 	}
-	shelter, _, shouldReturn := shelterRoleGuard(r.Context(), w, cfg)
+	shelter, role, shouldReturn := shelterRoleGuard(r.Context(), w, cfg)
+
 	if shouldReturn {
 		return
 	}
@@ -983,7 +992,20 @@ func (s *ShelterRemoveRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	}
 
 	if targetRole == ShelterRoleSuperAdmin {
+		s.Log.Debug("Super admin are not allowed to be removed this way.", "user_role", role, "target_role", targetRole)
+
 		flashData := newFlash(flashLevelError, "Super admin are not allowed to be removed this way.")
+		s.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		redirectURL := strings.ReplaceAll(s.ShelterRolesURL, "{shelter_id}", shelter.ID)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		return
+	}
+
+	if targetRole == ShelterRoleAdmin && role == ShelterRoleAdmin {
+		s.Log.Debug("User cannot remove a role equivalent to their own.", "user_role", role, "target_role", targetRole)
+
+		flashData := newFlash(flashLevelError, "You cannot remove a role equivalent to your own.")
 		s.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
 
 		redirectURL := strings.ReplaceAll(s.ShelterRolesURL, "{shelter_id}", shelter.ID)
