@@ -716,16 +716,10 @@ func (s *ShelterRolesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		basePageData: basePageData{
 			LoginSession: loginSessionData,
 		},
-<<<<<<< HEAD
 		UserRole: role,
-		Flash:    flashData,
+		Flash:    flash,
 		Shelter:  shelter,
 		Roles:    roles,
-=======
-		Flash:   flash,
-		Shelter: shelter,
-		Roles:   roles,
->>>>>>> 9eeec8c (flash util added)
 	})
 	if err != nil {
 		s.Log.Error("Unable to render page.", "error", err.Error())
