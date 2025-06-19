@@ -155,8 +155,7 @@ func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		referer := r.Referer()
 		if referer == "" {
-			flash := newFlash(flashLevelError, message)
-			s.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
+			setFlash(w, flashLevelError, message)
 			http.Redirect(w, r, referer, http.StatusSeeOther)
 		}
 
@@ -231,15 +230,13 @@ func (s *SignupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 
-		flash := newFlash(flashLevelSuccess, "Verification code sent.")
-		s.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
+		setFlash(w, flashLevelSuccess, "Verification code sent.")
 
 		http.Redirect(w, r, s.VerificationRedirectURL, http.StatusSeeOther)
 		return
 	}
 
-	var flash *flash
-	s.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flash)
+	flash := getFlash(w, r)
 
 	err := RenderPage(w, signupPage, http.StatusOK, signupPageData{
 		Flash:             flash,
@@ -327,8 +324,8 @@ func (s *SignupVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		err := s.SessionStore.Decode(r, sessionKeySignupVerification, &signupVerification)
 		if err != nil {
 			s.Log.Error("Unable to decode signup verification from session.", "error", err.Error())
-			flash := newFlash(flashLevelError, "Please start the signup process.")
-			s.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
+
+			setFlash(w, flashLevelError, "Please start the signup process.")
 			http.Redirect(w, r, s.SignupURL, http.StatusSeeOther)
 			return
 		}
@@ -361,8 +358,7 @@ func (s *SignupVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		if err != nil {
 			if errors.Is(err, ErrUserEmailInUse) {
 				s.Log.Info("Email is already in use.", "email", signupVerification.Values.Email)
-				flash := newFlash(flashLevelError, "Email is already in use.")
-				s.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
+				setFlash(w, flashLevelError, "Email is already in use.")
 				http.Redirect(w, r, s.SignupURL, http.StatusSeeOther)
 				return
 			}
@@ -377,14 +373,13 @@ func (s *SignupVerificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		}
 
 		s.Log.Info("Successfully created a local account.", "user_id", user.ID, "local_account_id", localAccount.ID)
-		flash := newFlash(flashLevelSuccess, "Successfully created an account.")
-		s.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
+
+		setFlash(w, flashLevelSuccess, "Successfully created an account.")
 		http.Redirect(w, r, s.SignupURL, http.StatusSeeOther)
 		return
 	}
 
-	var flash *flash
-	s.SessionStore.Decode(r, sessionKeyFlash, &flash)
+	flash := getFlash(w, r)
 	s.renderPage(w, http.StatusOK, signupVerificationPageData{
 		Flash: flash,
 	})
@@ -437,8 +432,8 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if loginSessionData != nil {
 		l.Log.Debug("User is already logged in.", "user_id", loginSessionData.UserID)
-		flash := newFlash(flashLevelSuccess, "You are already logged in.")
-		l.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
+
+		setFlash(w, flashLevelSuccess, "You are already logged in.")
 		http.Redirect(w, r, l.SuccessRedirect, http.StatusSeeOther)
 		return
 	}
@@ -512,17 +507,14 @@ func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		flash := newFlash(flashLevelSuccess, "Successfully logged in.")
-		l.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
+		setFlash(w, flashLevelSuccess, "Successfully logged in.")
 		http.Redirect(w, r, l.SuccessRedirect, http.StatusSeeOther)
 		return
 	}
 
-	var flashData *flash
-	l.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flashData)
-
+	flash := getFlash(w, r)
 	l.renderPage(w, r, http.StatusOK, loginPageData{
-		Flash: flashData,
+		Flash: flash,
 	})
 }
 
@@ -676,8 +668,7 @@ func (g *GoogleAuthRedirectHandler) Error(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	flash := newFlash(flashLevelError, message)
-	g.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
+	setFlash(w, flashLevelError, message)
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
 
@@ -744,14 +735,13 @@ func (a *AccountHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var flashData *flash
-	a.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flashData)
+	flash := getFlash(w, r)
 
 	err = RenderPage(w, accountPage, http.StatusOK, accountPageData{
 		basePageData: basePageData{
 			LoginSession: loginSessionData,
 		},
-		Flash:          flashData,
+		Flash:          flash,
 		IsLocalAccount: localAccount != nil,
 	})
 	if err != nil {
@@ -915,9 +905,7 @@ func (a *AccountInfoUpdateHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 
 		a.Log.Info("User info was successfully updated.", "user_id", user.ID)
 
-		flash := newFlash(flashLevelSuccess, "User info was updated successfully.")
-		a.SessionStore.Encode(w, sessionKeyFlash, flash, flashMaxAge)
-
+		setFlash(w, flashLevelSuccess, "User info was updated successfully.")
 		http.Redirect(w, r, a.SuccessRedirectURL, http.StatusFound)
 		return
 	}
@@ -1011,8 +999,7 @@ func (a *AccountChangeEmailRequestHandler) ServeHTTP(w http.ResponseWriter, r *h
 		err := a.SessionStore.Encode(w, sessionKeyLoginSession, loginSessionData, loginSessionData.ExpiresAt.Sub(time.Now()))
 		if err != nil {
 			a.Log.Error("Unable to encode verification code to session store.", "error", err.Error())
-			flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
-			a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+			setFlash(w, flashLevelError, clientMessageUnexpectedError)
 			http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
 			return
 		}
@@ -1027,8 +1014,8 @@ func (a *AccountChangeEmailRequestHandler) ServeHTTP(w http.ResponseWriter, r *h
 	err := a.SessionStore.Encode(w, sessionKeyChangeEmailRequestVerification, verificationCode, time.Minute*5)
 	if err != nil {
 		a.Log.Error("Unable to encode verification code to session.", "error", err.Error())
-		flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
-		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		setFlash(w, flashLevelError, clientMessageUnexpectedError)
 		http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
 		return
 	}
@@ -1115,16 +1102,16 @@ func (a *AccountEmailChangeHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 
 	if !loginSessionData.EmailChangeState.IsVerified {
 		a.Log.Debug("Unauthorized email change.")
-		flashData := newFlash(flashLevelError, "Unauthorized. Please complete the verification step.")
-		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		setFlash(w, flashLevelError, "Unauthorized. Please complete the verification step.")
 		http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
 		return
 	}
 
 	if loginSessionData.EmailChangeState.ExpiresAt.Before(time.Now()) {
 		a.Log.Debug("Verification code is expired.", "verification_code_expiry", loginSessionData.EmailChangeState.ExpiresAt.String())
-		flashData := newFlash(flashLevelError, "Verification code is expired. Please try again.")
-		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		setFlash(w, flashLevelError, "Verification code is expired. Please try again.")
 		http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
 		return
 	}
@@ -1157,8 +1144,8 @@ func (a *AccountEmailChangeHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		err := a.SessionStore.Encode(w, sessionKeyLoginSession, loginSessionData, loginSessionData.ExpiresAt.Sub(time.Now()))
 		if err != nil {
 			a.Log.Error("Failed to update login session data")
-			flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
-			a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+			setFlash(w, flashLevelError, clientMessageUnexpectedError)
 			http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
 			return
 		}
@@ -1168,8 +1155,8 @@ func (a *AccountEmailChangeHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		err = a.SessionStore.Encode(w, sessionKeyNewEmailVerificationCode, verificationCode, time.Minute*5)
 		if err != nil {
 			a.Log.Error("Unable to encode verification code to session.", "error", err.Error())
-			flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
-			a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+			setFlash(w, flashLevelError, clientMessageUnexpectedError)
 			http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
 			return
 		}
@@ -1186,8 +1173,8 @@ func (a *AccountEmailChangeHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		})
 		if err != nil {
 			a.Log.Error("Unable to write email template.", "error", err.Error())
-			flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
-			a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+			setFlash(w, flashLevelError, clientMessageUnexpectedError)
 			http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
 			return
 		}
@@ -1201,21 +1188,17 @@ func (a *AccountEmailChangeHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 
 		a.Log.Info("Verification code was sent on new email.", "new_email", newEmail)
 
-		flashData := newFlash(flashLevelSuccess, "A verification code was sent on your new email.")
-		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
-
+		setFlash(w, flashLevelSuccess, "A verification code was sent on your new email.")
 		http.Redirect(w, r, a.VerificationRedirectURL, http.StatusSeeOther)
 		return
 	}
 
-	var flashData *flash
-	a.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flashData)
-
+	flash := getFlash(w, r)
 	a.renderPage(w, http.StatusOK, accountEmailChangePageData{
 		basePageData: basePageData{
 			LoginSession: loginSessionData,
 		},
-		Flash: flashData,
+		Flash: flash,
 	})
 }
 
@@ -1266,16 +1249,16 @@ func (a *AccountChangeEmailVerificationHandler) ServeHTTP(w http.ResponseWriter,
 
 	if !loginSessionData.EmailChangeState.IsVerified {
 		a.Log.Debug("Unauthorized email change.")
-		flashData := newFlash(flashLevelError, "Unauthorized. Please complete the verification step.")
-		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		setFlash(w, flashLevelError, "Unauthorized. Please complete the verification step.")
 		http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
 		return
 	}
 
 	if loginSessionData.EmailChangeState.ExpiresAt.Before(time.Now()) {
 		a.Log.Debug("Verification code is expired.", "verification_code_expiry", loginSessionData.EmailChangeState.ExpiresAt.String())
-		flashData := newFlash(flashLevelError, "Verification code is expired. Please try again.")
-		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+		setFlash(w, flashLevelError, "Verification code is expired. Please try again.")
 		http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
 		return
 	}
@@ -1286,8 +1269,8 @@ func (a *AccountChangeEmailVerificationHandler) ServeHTTP(w http.ResponseWriter,
 		err := a.SessionStore.Decode(r, sessionKeyNewEmailVerificationCode, &correctVerificationCode)
 		if err != nil {
 			a.Log.Error("Unable to decode verification code from session.", "error", err.Error())
-			flashData := newFlash(flashLevelError, clientMessageUnexpectedError)
-			a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+
+			setFlash(w, flashLevelError, clientMessageUnexpectedError)
 			http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
 			return
 		}
@@ -1317,17 +1300,17 @@ func (a *AccountChangeEmailVerificationHandler) ServeHTTP(w http.ResponseWriter,
 			Email: &newEmail,
 		})
 		if err != nil {
-			var flashData *flash
 			if errors.Is(err, ErrUserEmailInUse) {
 				a.Log.Debug("Email is already in use.", "email", newEmail)
-				flashData = newFlash(flashLevelError, "Email is already in use.")
 
-			} else {
-				a.Log.Error("Unexpected error while updating user email.", "error", err.Error())
-				flashData = newFlash(flashLevelError, clientMessageUnexpectedError)
+				setFlash(w, flashLevelError, "Email is already in use.")
+				http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
+				return
 			}
-			a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
 
+			a.Log.Error("Unexpected error while updating user email.", "error", err.Error())
+
+			newFlash(flashLevelError, clientMessageUnexpectedError)
 			http.Redirect(w, r, a.ErrorRedirectURL, http.StatusSeeOther)
 			return
 		}
@@ -1336,28 +1319,24 @@ func (a *AccountChangeEmailVerificationHandler) ServeHTTP(w http.ResponseWriter,
 
 		loginSessionData.EmailChangeState = nil
 		loginSessionData.Email = newEmail
-
 		err = a.SessionStore.Encode(w, sessionKeyLoginSession, loginSessionData, loginSessionData.ExpiresAt.Sub(time.Now()))
 		if err != nil {
 			a.Log.Error("Unable to update login session data.", "error", err.Error())
 		}
 
-		flashData := newFlash(flashLevelSuccess, "Change email was successful.")
-		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
-
+		setFlash(w, flashLevelSuccess, "Change email was successful.")
 		http.Redirect(w, r, a.SuccessRedirectURL, http.StatusSeeOther)
 
 		return
 	}
 
-	var flashData *flash
-	a.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flashData)
+	flash := getFlash(w, r)
 
 	a.renderPage(w, http.StatusOK, accountChangeEmailVerificationPageData{
 		basePageData: basePageData{
 			LoginSession: loginSessionData,
 		},
-		Flash: flashData,
+		Flash: flash,
 	})
 }
 
@@ -1509,8 +1488,7 @@ func (a *AccountChangePasswordHandler) ServeHTTP(w http.ResponseWriter, r *http.
 
 		a.Log.Debug("Account changed password successfully.", "account_id", localAccount.ID)
 
-		flashData := newFlash(flashLevelSuccess, "Successfully changed password.")
-		a.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
+		setFlash(w, flashLevelSuccess, "Successfully changed password.")
 		http.Redirect(w, r, a.SuccessRedirect, http.StatusSeeOther)
 		return
 	}

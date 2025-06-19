@@ -31,6 +31,13 @@ type flash struct {
 	Message string
 }
 
+func newFlash(level, message string) *flash {
+	return &flash{
+		Level:   level,
+		Message: message,
+	}
+}
+
 type basePageData struct {
 	LoginSession *loginSession
 }

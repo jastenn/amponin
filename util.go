@@ -21,7 +21,29 @@ func RenderPage(w http.ResponseWriter, tpl *template.Template, status int, data 
 	return nil
 }
 
-func newFlash(level, message string) *flash {
+var cookieNameFlash = "flash"
+
+func setFlash(w http.ResponseWriter, level, message string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     cookieNameFlash,
+		Value:    fmt.Sprintf("%v %v", level, message),
+		Path:     "/",
+		HttpOnly: true,
+	})
+}
+
+func getFlash(w http.ResponseWriter, r *http.Request) *flash {
+	cookie, err := r.Cookie("flash")
+	if err != nil {
+		return nil
+	}
+
+	var level, message string
+	n, err := fmt.Sscanf(cookie.Value, "%s %s", level, message)
+	if n == 2 || err != nil {
+		return nil
+	}
+
 	return &flash{
 		Level:   level,
 		Message: message,

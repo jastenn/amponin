@@ -232,10 +232,8 @@ func (rh *RegisterShelterHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 
 		rh.Log.Info("New shelter was created.", "shelter_id", shelter.ID, "user_id", loginSessionData.UserID)
 
-		flashData := newFlash(flashLevelSuccess, "Successfully registered a new shelter.")
-		rh.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
-
 		redirectURL := strings.ReplaceAll(rh.SuccessRedirectURL, "{shelter_id}", shelter.ID)
+		setFlash(w, flashLevelSuccess, "Successfully registered a new shelter.")
 		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 		return
 	}
@@ -327,15 +325,13 @@ func (g *GetShelterByIDHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	var flashData *flash
-	g.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flashData)
-
+	flash := getFlash(w, r)
 	err = RenderPage(w, getShelterByIDPage, http.StatusOK, shelterByIDPageData{
 		basePageData: basePageData{
 			LoginSession: loginSessionData,
 		},
 		Role:    role,
-		Flash:   flashData,
+		Flash:   flash,
 		Shelter: *shelter,
 	})
 	if err != nil {
@@ -623,10 +619,8 @@ func (e *ShelterUpdateInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 
 		e.Log.Info("Shelter info updated.", "shelter_id", shelterID, "user_id", loginSessionData.UserID)
 
-		flashData := newFlash(flashLevelSuccess, "Shelter info was updated successfully.")
-		e.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
-
 		redirectURL := strings.ReplaceAll(e.SuccessRedirectURL, "{shelter_id}", shelterID)
+		setFlash(w, flashLevelSuccess, "Shelter info was updated successfully.")
 		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 		return
 	}
@@ -717,17 +711,21 @@ func (s *ShelterRolesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var flashData *flash
-	s.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flashData)
-
+	flash := getFlash(w, r)
 	err = RenderPage(w, shelterRolesPage, http.StatusOK, shelterRolesPageData{
 		basePageData: basePageData{
 			LoginSession: loginSessionData,
 		},
+<<<<<<< HEAD
 		UserRole: role,
 		Flash:    flashData,
 		Shelter:  shelter,
 		Roles:    roles,
+=======
+		Flash:   flash,
+		Shelter: shelter,
+		Roles:   roles,
+>>>>>>> 9eeec8c (flash util added)
 	})
 	if err != nil {
 		s.Log.Error("Unable to render page.", "error", err.Error())
@@ -884,14 +882,12 @@ func (s *ShelterAddRoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		message := fmt.Sprintf("Success! %v has been added and assigned the role of %v", fieldValues.Email, fieldValues.Role)
-		flashData := newFlash(flashLevelSuccess, message)
-		s.SessionStore.Encode(w, sessionKeyFlash, flashData, flashMaxAge)
-
 		s.Log.Info("User has been added and assigned a role", "shelter_id", shelterID, "user_email", fieldValues.Email, "role", fieldValues.Role)
 
-		redirect := strings.ReplaceAll(s.SuccessRedirectURL, "{shelter_id}", shelterID)
-		http.Redirect(w, r, redirect, http.StatusSeeOther)
+		redirectURL := strings.ReplaceAll(s.SuccessRedirectURL, "{shelter_id}", shelterID)
+		message := fmt.Sprintf("Success! %v has been added and assigned the role of %v", fieldValues.Email, fieldValues.Role)
+		setFlash(w, flashLevelSuccess, message)
+		http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 		return
 	}
 

@@ -23,8 +23,7 @@ func (i *IndexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var loginSession *loginSession
 	i.SessionStore.Decode(r, sessionKeyLoginSession, &loginSession)
 
-	var flash *flash
-	i.SessionStore.DecodeAndRemove(w, r, sessionKeyFlash, &flash)
+	flash := getFlash(w, r)
 
 	if r.URL.Path != "/" {
 		i.Log.Debug("Page not found.", "path", r.URL.Path)
